@@ -11,8 +11,7 @@ export default function Landing() {
       <div className="relative z-10 max-w-4xl w-full flex flex-col items-center gap-8 text-center">
         
         {/* The Flyer Image */}
-        <div className="relative w-full max-w-lg aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 hover:scale-[1.02] transition duration-500">
-             {/* Note: Next.js looks in 'public' folder automatically */}
+        <div className="relative w-full max-w-sm md:max-w-lg aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 hover:scale-[1.02] transition duration-500">
             <Image 
               src="/toruneyimage.jpg" 
               alt="Tournament Flyer" 
@@ -26,21 +25,42 @@ export default function Landing() {
           CHESS CHAMPIONSHIP
         </h1>
 
-        {/* The Two Buttons */}
-        <div className="flex flex-col md:flex-row gap-6 w-full max-w-md">
-          <Link href="/live" className="flex-1 group">
-            <button className="w-full py-4 px-8 bg-red-600 hover:bg-red-500 rounded-xl font-black text-xl shadow-[0_0_20px_rgba(220,38,38,0.5)] transition transform group-hover:-translate-y-1">
+        {/* Navigation Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+          
+          {/* Primary Actions (Red & Blue) */}
+          <Link href="/live" className="group">
+            <button className="w-full py-4 bg-red-600 hover:bg-red-500 rounded-xl font-black text-xl shadow-[0_0_20px_rgba(220,38,38,0.5)] transition transform group-hover:-translate-y-1">
               🔴 LIVE MATCHES
             </button>
           </Link>
           
-          <Link href="/archive" className="flex-1 group">
-            <button className="w-full py-4 px-8 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-xl border border-slate-600 shadow-xl transition transform group-hover:-translate-y-1 text-slate-300 group-hover:text-white">
-              📂 ARCHIVE
+          <Link href="/standings" className="group">
+            <button className="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-xl shadow-[0_0_20px_rgba(37,99,235,0.5)] transition transform group-hover:-translate-y-1">
+              🏆 STANDINGS
             </button>
           </Link>
-        </div>
 
+          {/* Secondary Info (Slate) */}
+          <Link href="/rules" className="group">
+            <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-lg border border-slate-600 text-slate-300 group-hover:text-white transition">
+              📜 Rules
+            </button>
+          </Link>
+
+          <Link href="/procedure" className="group">
+            <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-lg border border-slate-600 text-slate-300 group-hover:text-white transition">
+              ♟️ LiChess Guide
+            </button>
+          </Link>
+
+           <Link href="/archive" className="group md:col-span-2">
+            <button className="w-full py-3 bg-slate-900 hover:bg-slate-800 rounded-xl font-medium text-slate-400 border border-slate-800 hover:text-white transition">
+              📂 Match Archive
+            </button>
+          </Link>
+
+        </div>
       </div>
     </main>
   );
