@@ -1,90 +1,46 @@
-"use client";
-import { useEffect, useState } from 'react';
-import { supabase } from '../utils/supabaseClient';
+import Link from 'next/link';
+import Image from 'next/image';
 
-export default function Home() {
-  const [matches, setMatches] = useState<any[]>([]);
-
-  useEffect(() => {
-    const fetchMatches = async () => {
-      let { data } = await supabase
-        .from('live_matches')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      if (data) setMatches(data);
-    };
-
-    fetchMatches();
-    const interval = setInterval(fetchMatches, 5000); 
-    return () => clearInterval(interval);
-  }, []);
-
+export default function Landing() {
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-      {/* Navbar / Header */}
-      <header className="bg-slate-950 border-b border-slate-800 p-6 shadow-lg">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 text-center md:text-left">
-            ♟️ Club Championship
-          </h1>
-          <span className="px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-sm font-bold border border-red-500/20 animate-pulse">
-            LIVE NOW
-          </span>
-        </div>
-      </header>
+    <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      
+      {/* Background decoration */}
+      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black z-0"></div>
 
-      {/* Main Grid */}
-      <div className="max-w-7xl mx-auto p-4 md:p-6">
+      <div className="relative z-10 max-w-4xl w-full flex flex-col items-center gap-8 text-center">
         
-        {/* Empty State */}
-        {matches.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 opacity-50">
-            <div className="text-6xl mb-4">☕</div>
-            <h2 className="text-xl">Waiting for matches to start...</h2>
-          </div>
-        )}
-
-        {/* The Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {matches.map((match) => (
-            <div key={match.id} className="bg-slate-800 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col">
-              
-              {/* Match Header */}
-              <div className="bg-slate-900/50 p-3 md:p-4 flex justify-between items-center border-b border-slate-700">
-                {/* White Player */}
-                <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-100 border border-slate-300 shadow-[0_0_10px_rgba(255,255,255,0.5)] shrink-0"></div>
-                  {/* FIX: Removed truncate and max-w, adjusted font size */}
-                  <span className="font-bold text-base md:text-xl break-words leading-tight">{match.white_name}</span>
-                </div>
-
-                {/* VS Badge */}
-                <div className="px-2">
-                  <div className="bg-slate-800 px-2 py-1 rounded text-[10px] md:text-xs font-mono text-slate-500 tracking-widest border border-slate-700">
-                    VS
-                  </div>
-                </div>
-
-                {/* Black Player */}
-                <div className="flex items-center justify-end gap-2 md:gap-3 flex-1 min-w-0 text-right">
-                  {/* FIX: Removed truncate and max-w */}
-                  <span className="font-bold text-base md:text-xl break-words leading-tight">{match.black_name}</span>
-                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-900 border border-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.5)] shrink-0"></div>
-                </div>
-              </div>
-
-              {/* The Board */}
-              <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3]">
-                <iframe 
-                  src={`https://lichess.org/embed/${match.lichess_url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1]}?theme=auto&bg=auto`}
-                  className="absolute inset-0 w-full h-full"
-                  frameBorder="0"
-                ></iframe>
-              </div>
-            </div>
-          ))}
+        {/* The Flyer Image */}
+        <div className="relative w-full max-w-lg aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 hover:scale-[1.02] transition duration-500">
+             {/* Note: Next.js looks in 'public' folder automatically */}
+            <Image 
+              src="/toruneyimage.jpg" 
+              alt="Tournament Flyer" 
+              fill
+              className="object-cover"
+              priority
+            />
         </div>
+
+        <h1 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-600 drop-shadow-sm">
+          CHESS CHAMPIONSHIP
+        </h1>
+
+        {/* The Two Buttons */}
+        <div className="flex flex-col md:flex-row gap-6 w-full max-w-md">
+          <Link href="/live" className="flex-1 group">
+            <button className="w-full py-4 px-8 bg-red-600 hover:bg-red-500 rounded-xl font-black text-xl shadow-[0_0_20px_rgba(220,38,38,0.5)] transition transform group-hover:-translate-y-1">
+              🔴 LIVE MATCHES
+            </button>
+          </Link>
+          
+          <Link href="/archive" className="flex-1 group">
+            <button className="w-full py-4 px-8 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-xl border border-slate-600 shadow-xl transition transform group-hover:-translate-y-1 text-slate-300 group-hover:text-white">
+              📂 ARCHIVE
+            </button>
+          </Link>
+        </div>
+
       </div>
     </main>
   );
