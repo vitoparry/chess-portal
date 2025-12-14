@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { Analytics } from "@vercel/analytics/react" // <--- IMPORT THIS
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,7 +20,6 @@ export default function RootLayout({
       <body className={inter.className}>
         
         {/* 🦁 CLUB LOGO OVERLAY */}
-        {/* This stays fixed in the top-left corner on ALL pages */}
         <div className="fixed top-2 left-2 z-50 mix-blend-plus-lighter opacity-90 hover:opacity-100 transition duration-300">
            <a href="/" title="Back to Home">
              <img 
@@ -31,6 +31,10 @@ export default function RootLayout({
         </div>
 
         {children}
+        
+        {/* 📊 ANALYTICS COMPONENT */}
+        <Analytics /> 
+
       </body>
     </html>
   )
