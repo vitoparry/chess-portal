@@ -26,7 +26,6 @@ export default function Live() {
           <h1 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
             🔴 Live Arena
           </h1>
-          {/* NAVIGATION BUTTON NOW ON RIGHT */}
           <a href="/" className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition font-bold text-sm border border-slate-700">
             ← Home
           </a>
@@ -44,6 +43,7 @@ export default function Live() {
           {matches.map((match) => (
             <div key={match.id} className="bg-slate-800 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col">
               
+              {/* Card Header */}
               <div className="bg-slate-900/50 p-3 md:p-4 flex justify-between items-center border-b border-slate-700">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-100 border border-slate-300 shadow-[0_0_10px_rgba(255,255,255,0.5)] shrink-0"></div>
@@ -70,9 +70,10 @@ export default function Live() {
                 </div>
               </div>
 
-              <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3]">
+              {/* The Board - FORCED DARK MODE */}
+              <div className="relative w-full aspect-[3/4] md:aspect-video lg:aspect-[4/3]">
                 <iframe 
-                  src={`https://lichess.org/embed/${match.lichess_url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1]}?theme=auto&bg=auto`}
+                  src={`https://lichess.org/embed/${match.lichess_url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1]}?theme=auto&bg=dark`} 
                   className="absolute inset-0 w-full h-full"
                   frameBorder="0"
                 ></iframe>

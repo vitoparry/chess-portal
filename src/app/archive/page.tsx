@@ -68,11 +68,11 @@ export default function Archive() {
 
               <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] opacity-80 group-hover:opacity-100 transition">
                 <iframe 
-                  src={`https://lichess.org/embed/${match.lichess_url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1]}?theme=auto&bg=auto`}
-                  className="absolute inset-0 w-full h-full"
-                  frameBorder="0"
-                  style={{ pointerEvents: 'none' }}
-                ></iframe>
+                src={`https://lichess.org/embed/${match.lichess_url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1]}?theme=auto&bg=dark`}
+                className="absolute inset-0 w-full h-full"
+                frameBorder="0"
+                style={{ pointerEvents: 'none' }}
+              ></iframe>
               </div>
               
               <a href={match.lichess_url} target="_blank" className="bg-slate-900 text-center py-2 text-xs font-bold text-slate-500 hover:text-amber-500 hover:bg-slate-950 transition uppercase tracking-widest">
