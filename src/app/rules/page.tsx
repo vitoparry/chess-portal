@@ -38,32 +38,80 @@ export default function Rules() {
         {/* CONTENT SWITCHER */}
         <div className="space-y-8 text-slate-300 leading-relaxed min-h-[400px]">
           
-          {/* --- ADULTS RULES --- */}
+          {/* --- ADULTS RULES (Full Detailed Version) --- */}
           {activeTab === 'Adults' && (
-            <div className="animate-in fade-in duration-500">
-              <section className="bg-slate-900/50 p-6 rounded-xl border border-slate-700 mb-6">
-                <h2 className="text-xl font-bold text-white mb-4 border-l-4 border-amber-500 pl-3">Adults Format</h2>
+            <div className="animate-in fade-in duration-500 space-y-8">
+              
+              {/* Section 1 */}
+              <section className="bg-slate-900/50 p-6 rounded-xl border border-slate-700">
+                <h2 className="text-xl font-bold text-white mb-4 border-l-4 border-amber-500 pl-3">
+                  Tournament Overview
+                </h2>
                 <ul className="space-y-2 list-disc pl-5 marker:text-amber-500">
-                  <li><strong>Format:</strong> Round Robin Group Stage followed by Knockouts.</li>
-                  <li><strong>Time Control:</strong> 20 minutes + 10 seconds increment.</li>
-                  <li><strong>Scoring:</strong> Win (1), Draw (0.5), Loss (0).</li>
+                  <li><strong>Event:</strong> Chess Championship 2025-26</li>
+                  <li><strong>Category:</strong> Adults</li>
+                  <li><strong>Players:</strong> 16 Participants</li>
                 </ul>
               </section>
 
-              <section className="mb-6">
-                <h2 className="text-xl font-bold text-white mb-3">Knockouts & Grand Final</h2>
-                <ul className="space-y-2 list-disc pl-5 marker:text-purple-500">
-                  <li>Top 2 players from each pool qualify.</li>
-                  <li><strong>Grand Final:</strong> 4-game series (2 Standard, 2 Blitz).</li>
-                  <li><strong>Tie-Breaks:</strong> Blitz games (5 mins) until a winner is decided.</li>
-                </ul>
-              </section>
-
+              {/* Section 2 */}
               <section>
-                <h2 className="text-xl font-bold text-white mb-3">General</h2>
+                <h2 className="text-xl font-bold text-white mb-3">Group Stage (Round Robin)</h2>
+                <ul className="space-y-2 list-disc pl-5 marker:text-blue-500">
+                  <li>Each player in a group plays one game against every other player in the opposite group.</li>
+                  <li><strong>Time Control:</strong> 20 minutes + 10 seconds increment.</li>
+                  <li><strong>Scoring System:</strong>
+                    <ul className="list-disc pl-5 mt-1 text-slate-400">
+                      <li>Win: <span className="text-green-400 font-bold">1 point</span></li>
+                      <li>Draw: <span className="text-yellow-400 font-bold">0.5 points</span></li>
+                      <li>Loss: <span className="text-red-400 font-bold">0 points</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </section>
+
+              {/* Section 3: Knockouts */}
+              <section>
+                <h2 className="text-xl font-bold text-white mb-3">Knockout Stage</h2>
+                <ul className="space-y-2 list-disc pl-5 marker:text-purple-500">
+                  <li>The <strong>top two players</strong> from each pool qualify for the knockout stage.</li>
+                  <li>These four players form the bracket (Semifinals & Final).</li>
+                  <li><strong>Tie-Breaks in Groups:</strong> If there is a tie for a qualifying spot:
+                     <ul className="list-disc pl-5 mt-2 text-slate-400">
+                        <li>5-minute blitz games are played between tied players.</li>
+                        <li>Blitz games are repeated until a winner is decided.</li>
+                        <li>Colors for the first blitz game are decided by lot, then alternating.</li>
+                     </ul>
+                  </li>
+                </ul>
+              </section>
+
+              {/* Section 4: Grand Final */}
+              <section className="bg-amber-900/20 p-6 rounded-xl border border-amber-700/50">
+                <h2 className="text-xl font-bold text-amber-500 mb-3">🏆 The Grand Final</h2>
+                <p className="mb-4">The top two winners of the knockout table play a <strong>4-game Grand Final</strong>.</p>
+                
+                <h3 className="font-bold text-white mb-2">Game Format:</h3>
+                <ul className="space-y-2 list-decimal pl-5 marker:text-amber-500 text-slate-200">
+                    <li><strong>2 Games:</strong> Standard (20 mins + 10 sec).</li>
+                    <li><strong>2 Games:</strong> Blitz (5 mins).</li>
+                </ul>
+
+                <h3 className="font-bold text-white mt-4 mb-2">Tie-Breaker (If tied after 4 games):</h3>
+                <ul className="space-y-2 list-disc pl-5 marker:text-red-500 text-slate-300">
+                    <li>Two additional 5-minute blitz games are played.</li>
+                    <li>If still tied, additional pairs of 5-minute blitz games are played until a winner is decided.</li>
+                </ul>
+              </section>
+
+              {/* Section 5 */}
+              <section>
+                <h2 className="text-xl font-bold text-white mb-3">General Regulations</h2>
                 <ul className="space-y-2 list-disc pl-5 marker:text-green-500">
-                  <li>Played on Lichess.org.</li>
-                  <li>White pieces sends the challenge link.</li>
+                  <li>All games must be played on <strong>lichess.org</strong>.</li>
+                  <li>All games are played according to current FIDE Laws of Chess.</li>
+                  <li><strong>White Pieces:</strong> The player with White must send the link to their opponent.</li>
+                  <li>Any disputes not covered here will be decided by the Arbiter (Final Decision).</li>
                 </ul>
               </section>
             </div>
