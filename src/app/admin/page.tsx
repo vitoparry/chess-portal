@@ -1,369 +1,441 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabaseClient';
+import Papa from 'papaparse'; // 📦 Ensure you ran: npm install papaparse
+
+// 📊 CONFIG: Links to your ROUNDS sheets
+const ROUNDS_SHEETS = [
+  { category: 'Adults', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6UFPFARgN12MiEuYpGG2WWAGe0SPlORnm1jeSgoFiXZY7ia4sFXMXAVXalIVn1X8cCK8kFAQ__44k/pub?gid=1586830246&single=true&output=csv' },
+  { category: 'Juniors', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSugPx6ejmoqQGvkXMVZ2IC-5NKuKFuhrBkEFjSRr-lZbY1aQIfW0tQXllF6cSGNIHL7TXgklGosGZ6/pub?gid=1273587789&single=true&output=csv' },
+  { category: 'Kids', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSOj-HR4exbW-YvxAjDSe_l83xGXNbty52DoFhJQQqk7U97KVtKnh9F2QcG1Dn9z3hK9C6eGKqJA9ln/pub?gid=756584123&single=true&output=csv' }
+];
+
+// 🔧 CONFIG: Map Excel Headers to our code (Based on your screenshot)
+const EXCEL_COLUMNS = {
+  WhiteName: 'White',             // Column F
+  BlackName: 'Black',             // Column G
+  Link: 'Lichess Match URL',      // Column I
+  WhitePoints: 'White Points',    // Column J
+  BlackPoints: 'Black Points'     // Column K
+};
 
 export default function Admin() {
-  // --- STATE MANAGEMENT ---
+  // --- STATE ---
   const [session, setSession] = useState<any>(null);
   const [accessDenied, setAccessDenied] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   
-  // Form Inputs
-  const [whiteId, setWhiteId] = useState('');
-  const [blackId, setBlackId] = useState('');
-  const [whiteReal, setWhiteReal] = useState('');
-  const [blackReal, setBlackReal] = useState('');
-  const [link, setLink] = useState('');
-  const [startTime, setStartTime] = useState(''); // 📅 NEW: Start Time Input
+  // LIVE FORM
+  const [liveLink, setLiveLink] = useState('');
+  const [liveWhite, setLiveWhite] = useState('');
+  const [liveBlack, setLiveBlack] = useState('');
+  const [liveWhiteId, setLiveWhiteId] = useState('');
+  const [liveBlackId, setLiveBlackId] = useState('');
+  const [liveCategory, setLiveCategory] = useState('Adults'); 
+
+  // SCHEDULE FORM
+  const [schedTime, setSchedTime] = useState('');
+  const [schedWhite, setSchedWhite] = useState('');
+  const [schedBlack, setSchedBlack] = useState('');
+  const [schedWhiteId, setSchedWhiteId] = useState('');
+  const [schedBlackId, setSchedBlackId] = useState('');
+  const [schedCategory, setSchedCategory] = useState('Adults'); 
+
+  // EDIT OVERLAY
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLink, setEditLink] = useState('');
+  const [editWhite, setEditWhite] = useState('');
+  const [editBlack, setEditBlack] = useState('');
+  const [editWhiteId, setEditWhiteId] = useState('');
+  const [editBlackId, setEditBlackId] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editCategory, setEditCategory] = useState('Adults');
   
-  // System State
+  // SYSTEM
   const [loading, setLoading] = useState(false);
   const [matches, setMatches] = useState<any[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState(''); // Feedback for Sync button
 
-  // --- 1. AUTHENTICATION & SECURITY ---
+  // --- AUTH ---
   useEffect(() => {
-    // Check active session on load
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) checkAccess(session.user.email);
-      else setCheckingAuth(false);
+      setSession(session); if (session) checkAccess(session.user.email); else setCheckingAuth(false);
     });
-
-    // Listen for login/logout events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) checkAccess(session.user.email);
-      else setCheckingAuth(false);
+      setSession(session); if (session) checkAccess(session.user.email); else setCheckingAuth(false);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  // Database Check: Is this email in the 'admins' table?
   const checkAccess = async (email: string | undefined) => {
     if (!email) return;
     setCheckingAuth(true);
-
-    const { data } = await supabase
-      .from('admins')
-      .select('email')
-      .eq('email', email)
-      .single();
-
-    if (data) {
-      setAccessDenied(false);
-      fetchAllMatches();
-    } else {
-      setAccessDenied(true);
-    }
+    const { data } = await supabase.from('admins').select('email').eq('email', email).single();
+    if (data) { setAccessDenied(false); fetchAllMatches(); } else { setAccessDenied(true); }
     setCheckingAuth(false);
   };
+  const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/admin' } }); };
+  const handleLogout = async () => { await supabase.auth.signOut(); setMatches([]); setAccessDenied(false); };
 
-  const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin + '/admin' }
-    });
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setMatches([]);
-    setAccessDenied(false);
-  };
-
-  // --- 2. DATA FETCHING ---
+  // --- DATA ---
   const fetchAllMatches = async () => {
-    // Fetch Scheduled first (by time), then Live, then everything else
-    let { data } = await supabase
-        .from('live_matches')
-        .select('*')
-        .order('start_time', { ascending: true })
-        .order('created_at', { ascending: false });
+    let { data } = await supabase.from('live_matches').select('*').order('start_time', { ascending: true }).order('created_at', { ascending: false });
     if (data) setMatches(data);
   };
 
-  const fetchLichessData = async () => {
-    if (!link.includes('lichess.org/')) return alert('Invalid Link');
-    const gameId = link.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
+  const fetchLichessInfo = async (url: string, setW: any, setB: any) => {
+    if (!url.includes('lichess.org/')) return alert('Invalid Link');
     setLoading(true);
     try {
+      const gameId = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
       const res = await fetch(`https://lichess.org/game/export/${gameId}?moves=false&clocks=false&evals=false`);
       const text = await res.text();
-      setWhiteId(text.match(/\[White "(.+?)"\]/)?.[1] || "Unknown");
-      setBlackId(text.match(/\[Black "(.+?)"\]/)?.[1] || "Unknown");
+      setW(text.match(/\[White "(.+?)"\]/)?.[1] || "Unknown");
+      setB(text.match(/\[Black "(.+?)"\]/)?.[1] || "Unknown");
     } catch (e) { alert("Error fetching data"); }
     setLoading(false);
   };
 
-  // --- 3. CORE ACTIONS ---
-  
-  // Start Edit Mode
-  const startEdit = (match: any) => {
-    setEditingId(match.id);
-    setLink(match.lichess_url || ''); // Handle null links for scheduled games
-    setWhiteId(match.white_name);
-    setBlackId(match.black_name);
-    setWhiteReal(match.white_display_name || '');
-    setBlackReal(match.black_display_name || '');
-    
-    // Format the date for the input field (requires YYYY-MM-DDTHH:MM format)
-    if (match.start_time) {
-        const dt = new Date(match.start_time);
-        // Adjust to local ISO string for input
-        const localIso = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-        setStartTime(localIso);
-    } else {
-        setStartTime('');
+  // --- 🤖 SYNC FROM SHEETS FUNCTION ---
+  const handleSheetSync = async () => {
+    setSyncStatus('Fetching sheets...');
+    let addedCount = 0;
+
+    for (const sheet of ROUNDS_SHEETS) {
+        try {
+            const response = await fetch(sheet.url);
+            const csvText = await response.text();
+            
+            // Parse CSV
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            const rows: any[] = parsed.data;
+
+            for (const row of rows) {
+                // 1. Get Link
+                const link = row[EXCEL_COLUMNS.Link];
+                if (!link || !link.includes('lichess.org/')) continue; // Skip if no valid link
+
+                // 2. Extract Game ID to check duplicates
+                const gameId = link.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
+                if (!gameId) continue;
+
+                // 3. Check if exists in DB (Avoid duplicates)
+                const { data: existing } = await supabase
+                    .from('live_matches')
+                    .select('id')
+                    .ilike('lichess_url', `%${gameId}%`)
+                    .maybeSingle();
+
+                if (!existing) {
+                    // 4. Calculate Result from Points
+                    const wPts = row[EXCEL_COLUMNS.WhitePoints];
+                    const bPts = row[EXCEL_COLUMNS.BlackPoints];
+                    let resultString = null;
+
+                    // Convert Excel points to our "1 - 0" format
+                    if (wPts == '1') resultString = '1 - 0';
+                    else if (bPts == '1') resultString = '0 - 1';
+                    else if (wPts == '0.5' || wPts == '½') resultString = '½ - ½';
+                    else if (wPts && bPts) resultString = `${wPts} - ${bPts}`; // Fallback
+
+                    // 5. INSERT NEW ARCHIVED MATCH
+                    const whiteName = row[EXCEL_COLUMNS.WhiteName] || 'Unknown';
+                    const blackName = row[EXCEL_COLUMNS.BlackName] || 'Unknown';
+
+                    await supabase.from('live_matches').insert([{
+                        white_display_name: whiteName,
+                        black_display_name: blackName,
+                        white_name: whiteName, // Use real name as ID if ID is missing in sheet
+                        black_name: blackName, 
+                        lichess_url: link,
+                        category: sheet.category, 
+                        result: resultString,
+                        is_active: false // Goes straight to archive
+                    }]);
+                    addedCount++;
+                }
+            }
+        } catch (error) {
+            console.error(`Error syncing ${sheet.category}:`, error);
+        }
     }
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
-  // Cancel Edit Mode
-  const cancelEdit = () => {
-    setEditingId(null);
-    setLink('');
-    setWhiteId(''); setBlackId('');
-    setWhiteReal(''); setBlackReal('');
-    setStartTime('');
-  };
-
-  // Publish (Create or Update)
-  const handlePublish = async () => {
-    const finalWhiteName = whiteReal || whiteId;
-    const finalBlackName = blackReal || blackId;
-    
-    const matchData = {
-        white_name: whiteId,
-        black_name: blackId,
-        white_display_name: finalWhiteName,
-        black_display_name: finalBlackName,
-        lichess_url: link, // Can be empty if scheduling
-        start_time: startTime ? new Date(startTime).toISOString() : null,
-        is_active: true,
-        result: null // Reset result if we are re-publishing
-    };
-
-    if (editingId) {
-        const { error } = await supabase.from('live_matches').update(matchData).eq('id', editingId);
-        if (!error) { cancelEdit(); fetchAllMatches(); } else { alert("Error updating"); }
-    } else {
-        const { error } = await supabase.from('live_matches').insert([matchData]);
-        if (!error) { cancelEdit(); fetchAllMatches(); } else { alert("Error creating"); }
-    }
-  };
-
-  // 🏆 RECORD RESULT
-  const recordResult = async (id: string, result: string) => {
-    if(!confirm(`End match and record score: ${result}?`)) return;
-    
-    await supabase.from('live_matches').update({ 
-        result: result, 
-        is_active: false 
-    }).eq('id', id);
-    
+    setSyncStatus(addedCount > 0 ? `✅ Success! Added ${addedCount} new matches.` : '✅ Up to date.');
+    setTimeout(() => setSyncStatus(''), 5000);
     fetchAllMatches();
   };
 
+  // --- ACTIONS ---
+  const handleCreateLive = async () => {
+    const { error } = await supabase.from('live_matches').insert([{ 
+        white_name: liveWhiteId, black_name: liveBlackId,
+        white_display_name: liveWhite || liveWhiteId, black_display_name: liveBlack || liveBlackId,
+        lichess_url: liveLink, is_active: true, category: liveCategory
+    }]);
+    if (!error) { setLiveLink(''); setLiveWhite(''); setLiveBlack(''); setLiveWhiteId(''); setLiveBlackId(''); fetchAllMatches(); }
+  };
+
+  const handleCreateScheduled = async () => {
+    if (!schedTime) return alert("Please select a time");
+    const { error } = await supabase.from('live_matches').insert([{ 
+        white_name: schedWhiteId || 'TBD', black_name: schedBlackId || 'TBD',
+        white_display_name: schedWhite, black_display_name: schedBlack,
+        start_time: new Date(schedTime).toISOString(), is_active: true, category: schedCategory
+    }]);
+    if (!error) { setSchedTime(''); setSchedWhite(''); setSchedBlack(''); setSchedWhiteId(''); setSchedBlackId(''); fetchAllMatches(); }
+  };
+
+  const startEdit = (match: any) => {
+    setEditingId(match.id);
+    setEditLink(match.lichess_url || '');
+    setEditWhite(match.white_display_name || '');
+    setEditBlack(match.black_display_name || '');
+    setEditWhiteId(match.white_name || '');
+    setEditBlackId(match.black_name || '');
+    setEditCategory(match.category || 'Adults');
+    if (match.start_time) {
+        const dt = new Date(match.start_time);
+        const localIso = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+        setEditTime(localIso);
+    } else { setEditTime(''); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleUpdate = async () => {
+    const { error } = await supabase.from('live_matches').update({
+        white_display_name: editWhite, black_display_name: editBlack,
+        white_name: editWhiteId, black_name: editBlackId,
+        lichess_url: editLink, category: editCategory,
+        start_time: editTime ? new Date(editTime).toISOString() : null,
+    }).eq('id', editingId);
+    if (!error) { setEditingId(null); fetchAllMatches(); }
+  };
+
+  const promoteToLive = async (match: any) => {
+    const url = prompt(`Paste Lichess URL for ${match.white_display_name} vs ${match.black_display_name}`);
+    if (!url || !url.includes('lichess.org/')) return;
+    
+    let wId = match.white_name; let bId = match.black_name;
+    const gameId = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
+    try {
+        const res = await fetch(`https://lichess.org/game/export/${gameId}?moves=false&clocks=false&evals=false`);
+        const text = await res.text();
+        wId = text.match(/\[White "(.+?)"\]/)?.[1] || wId;
+        bId = text.match(/\[Black "(.+?)"\]/)?.[1] || bId;
+    } catch(e) {}
+
+    await supabase.from('live_matches').update({ lichess_url: url, white_name: wId, black_name: bId, is_active: true }).eq('id', match.id);
+    fetchAllMatches();
+  };
+
+  const recordResult = async (id: string, result: string) => {
+    if(!confirm(`End match: ${result}?`)) return;
+    await supabase.from('live_matches').update({ result: result, is_active: false }).eq('id', id);
+    fetchAllMatches();
+  };
   const toggleStatus = async (id: string, currentStatus: boolean) => {
     await supabase.from('live_matches').update({ is_active: !currentStatus }).eq('id', id);
     fetchAllMatches();
   };
-
   const handleDelete = async (id: string) => {
-    if (!confirm("Permanently delete?")) return;
+    if (!confirm("Delete?")) return;
     await supabase.from('live_matches').delete().eq('id', id);
-    if (editingId === id) cancelEdit();
+    if(editingId === id) setEditingId(null);
     fetchAllMatches();
   };
 
-  // --- 4. RENDER VIEWS ---
-
-  // Loading Screen
-  if (checkingAuth && session) return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="animate-spin text-4xl">⏳</div>
-      </div>
-  );
-
-  // Not Logged In (Professional View)
+  // --- RENDER ---
+  if (checkingAuth && session) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-4xl">⏳</div>;
   if (!session) return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="bg-slate-900 p-10 rounded-2xl shadow-2xl border border-slate-800 text-center max-w-md w-full">
-          <div className="mb-6 bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-3xl">🔒</div>
           <h1 className="text-2xl font-bold text-white mb-2">Admin Portal</h1>
-          <p className="text-slate-500 mb-8 text-sm">Authorized personnel only.</p>
-          <button onClick={handleLogin} className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-200 text-slate-900 font-bold py-3 rounded-xl transition shadow-lg">
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
-            Sign in with Google
-          </button>
-          <a href="/" className="block mt-8 text-slate-600 hover:text-slate-400 text-xs uppercase tracking-widest font-bold transition">← Return to Tournament</a>
+          <button onClick={handleLogin} className="w-full mt-6 flex items-center justify-center gap-3 bg-white text-slate-900 font-bold py-3 rounded-xl">Sign in with Google</button>
         </div>
       </div>
   );
+  if (accessDenied) return <div className="text-center text-red-500 mt-20">Access Denied</div>;
 
-  // Access Denied (Professional View)
-  if (accessDenied) return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="bg-slate-900 p-8 rounded-2xl border border-red-900/50 shadow-[0_0_50px_rgba(220,38,38,0.1)] text-center max-w-md w-full relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-orange-600"></div>
-          <div className="mb-6 text-5xl">🚫</div>
-          <h1 className="text-2xl font-bold text-red-500 mb-2">Authorization Failed</h1>
-          <p className="text-slate-400 text-sm mb-6 leading-relaxed">The account <strong>{session.user.email}</strong> is not listed in the <code>admins</code> database.</p>
-          <div className="flex flex-col gap-3">
-             <button onClick={handleLogout} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg border border-slate-700 transition font-medium">Sign out</button>
-             <a href="/" className="text-slate-500 hover:text-white text-xs py-2 transition">Return to Home</a>
-          </div>
-        </div>
-      </div>
-  );
-
-  // --- MAIN DASHBOARD ---
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6 font-sans">
-      <header className="max-w-5xl mx-auto mb-8 flex justify-between items-center">
+    <div className="min-h-screen bg-slate-900 text-white p-4 md:p-6 font-sans">
+      <header className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-4">
            <h1 className="text-3xl font-bold text-amber-500">Admin Control</h1>
-           <span className="text-xs bg-green-900/50 text-green-400 px-3 py-1 rounded-full border border-green-800 font-mono">
-             {session.user.email}
-           </span>
+           <span className="text-xs bg-green-900/50 text-green-400 px-3 py-1 rounded-full border border-green-800 font-mono">{session.user.email}</span>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4 items-center justify-center">
+            {/* 🤖 SYNC BUTTON */}
+            <button onClick={handleSheetSync} disabled={!!syncStatus} className="bg-purple-700 hover:bg-purple-600 border border-purple-500 px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition flex items-center gap-2">
+                {syncStatus ? <span className="animate-pulse">{syncStatus}</span> : <span>🔄 Sync from Excel</span>}
+            </button>
             <a href="/" className="text-slate-400 hover:text-white py-2 text-sm font-bold">View Site ↗</a>
-            <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded hover:bg-slate-700 transition text-sm">Logout</button>
+            <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded text-sm">Logout</button>
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto grid gap-8">
-        
-        {/* INPUT FORM */}
-        <div className={`p-6 rounded-xl border shadow-xl transition-all duration-300 ${editingId ? 'bg-slate-800 border-blue-500 ring-1 ring-blue-500/50' : 'bg-slate-800 border-slate-700'}`}>
-           <div className="flex justify-between items-center mb-4">
-             <h2 className="text-lg font-bold text-slate-300 flex items-center gap-2">
-               {editingId ? <span className="text-blue-400">✏️ Edit Mode</span> : <span>🚀 Schedule / New Match</span>}
-             </h2>
-             {editingId && (
-               <button onClick={cancelEdit} className="text-xs bg-slate-900 px-3 py-1 rounded text-slate-400 hover:text-white border border-slate-700 transition">
-                 Cancel
-               </button>
-             )}
+      {/* --- EDIT MODE OVERLAY --- */}
+      {editingId ? (
+        <div className="max-w-3xl mx-auto bg-slate-800 p-6 rounded-xl border border-blue-500 shadow-2xl mb-12 animate-in fade-in zoom-in duration-300">
+           <div className="flex justify-between items-center mb-6">
+             <h2 className="text-xl font-bold text-blue-400">✏️ Editing Match</h2>
+             <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-white">Cancel</button>
            </div>
            
-           <div className="flex gap-2 mb-6">
-             <input className="flex-1 bg-slate-950 p-3 rounded-lg border border-slate-600 focus:border-amber-500 outline-none transition" placeholder="Lichess Link (Leave empty to Schedule)" value={link} onChange={e => setLink(e.target.value)} />
-             <button onClick={fetchLichessData} disabled={loading} className="bg-blue-600 px-6 rounded-lg font-bold hover:bg-blue-500 disabled:opacity-50 transition shadow-lg text-sm tracking-wide">
-               {loading ? '...' : 'AUTO-FILL'}
-             </button>
-           </div>
-
-           {/* 📅 NEW: Date Picker */}
-           <div className="mb-6">
-              <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Match Time (Optional)</label>
-              <input 
-                type="datetime-local" 
-                className="w-full bg-slate-950 p-3 rounded-lg border border-slate-600 text-white scheme-dark focus:border-amber-500 outline-none"
-                value={startTime}
-                onChange={e => setStartTime(e.target.value)}
-              />
-           </div>
-
-           <div className="grid grid-cols-2 gap-6 mb-6">
-             <div className="space-y-2">
-                <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">White Player</label>
-                <input className="w-full bg-slate-950 p-3 rounded-lg border border-slate-500 text-white font-bold focus:ring-1 focus:ring-white outline-none" placeholder="Real Name" value={whiteReal} onChange={e => setWhiteReal(e.target.value)} />
-                <input className="w-full bg-slate-900/50 p-2 rounded border border-slate-800 text-xs text-slate-500 font-mono" placeholder="Lichess ID" value={whiteId} onChange={e => setWhiteId(e.target.value)} />
+           <div className="flex gap-4 mb-4">
+             <div className="flex-1">
+                 <input className="w-full bg-slate-950 p-3 rounded border border-slate-600" placeholder="Lichess Link" value={editLink} onChange={e => setEditLink(e.target.value)} />
              </div>
-             <div className="space-y-2">
-                <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Black Player</label>
-                <input className="w-full bg-slate-950 p-3 rounded-lg border border-slate-500 text-white font-bold focus:ring-1 focus:ring-white outline-none" placeholder="Real Name" value={blackReal} onChange={e => setBlackReal(e.target.value)} />
-                <input className="w-full bg-slate-900/50 p-2 rounded border border-slate-800 text-xs text-slate-500 font-mono" placeholder="Lichess ID" value={blackId} onChange={e => setBlackId(e.target.value)} />
+             <div className="w-1/3">
+                <select className="w-full bg-slate-950 p-3 rounded border border-slate-600 text-white font-bold" value={editCategory} onChange={e => setEditCategory(e.target.value)}>
+                    <option value="Adults">Adults</option>
+                    <option value="Juniors">Juniors</option>
+                    <option value="Kids">Kids</option>
+                </select>
              </div>
            </div>
+           <button onClick={() => fetchLichessInfo(editLink, setEditWhiteId, setEditBlackId)} className="mb-4 bg-blue-600 px-4 py-2 rounded font-bold text-xs">AUTO-FILL IDs</button>
+           
+           <div className="mb-4">
+              <label className="text-[10px] uppercase text-slate-500 font-bold">Time (Optional)</label>
+              <input type="datetime-local" className="w-full bg-slate-950 p-3 rounded border border-slate-600 text-white scheme-dark" value={editTime} onChange={e => setEditTime(e.target.value)} />
+           </div>
 
-           <button 
-             onClick={handlePublish} 
-             className={`w-full py-4 rounded-xl font-black text-lg shadow-lg transition transform active:scale-[0.98] ${editingId ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20' : 'bg-green-600 hover:bg-green-500 shadow-green-900/20'}`}
-           >
-             {editingId ? 'UPDATE MATCH' : (link ? 'GO LIVE NOW 🚀' : 'SCHEDULE MATCH 📅')}
-           </button>
+           <div className="grid grid-cols-2 gap-4 mb-6">
+             <div className="space-y-1">
+                <input className="w-full bg-slate-950 p-2 rounded border border-slate-600 font-bold" placeholder="White Name" value={editWhite} onChange={e => setEditWhite(e.target.value)} />
+                <input className="w-full bg-slate-900 p-1 rounded border border-slate-700 text-xs text-slate-500" placeholder="White ID" value={editWhiteId} onChange={e => setEditWhiteId(e.target.value)} />
+             </div>
+             <div className="space-y-1">
+                <input className="w-full bg-slate-950 p-2 rounded border border-slate-600 font-bold" placeholder="Black Name" value={editBlack} onChange={e => setEditBlack(e.target.value)} />
+                <input className="w-full bg-slate-900 p-1 rounded border border-slate-700 text-xs text-slate-500" placeholder="Black ID" value={editBlackId} onChange={e => setEditBlackId(e.target.value)} />
+             </div>
+           </div>
+           <button onClick={handleUpdate} className="w-full bg-blue-600 py-3 rounded font-black shadow-lg hover:bg-blue-500">SAVE CHANGES 💾</button>
         </div>
+      ) : (
+        /* --- SPLIT SCREEN INPUT AREA --- */
+        <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-8 mb-12">
+            
+            {/* LEFT: LIVE MATCH ENTRY */}
+            <div className="bg-slate-800 p-6 rounded-xl border border-red-500/30 shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-red-600"></div>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> GO LIVE NOW
+                    </h2>
+                    <select className="bg-slate-900 border border-slate-600 text-xs rounded px-2 py-1 text-slate-300" value={liveCategory} onChange={e => setLiveCategory(e.target.value)}>
+                        <option value="Adults">Adults</option>
+                        <option value="Juniors">Juniors</option>
+                        <option value="Kids">Kids</option>
+                    </select>
+                </div>
+                
+                <div className="flex gap-2 mb-4">
+                    <input className="flex-1 bg-slate-950 p-3 rounded border border-slate-600 text-sm" placeholder="Paste Lichess Link" value={liveLink} onChange={e => setLiveLink(e.target.value)} />
+                    <button onClick={() => fetchLichessInfo(liveLink, setLiveWhiteId, setLiveBlackId)} disabled={loading} className="bg-blue-600 px-4 rounded font-bold text-xs">{loading ? '...' : 'AUTO'}</button>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="space-y-1">
+                        <input className="w-full bg-slate-950 p-2 rounded border border-slate-600 text-sm font-bold" placeholder="White Name" value={liveWhite} onChange={e => setLiveWhite(e.target.value)} />
+                        <input className="w-full bg-slate-900 p-1 rounded border border-slate-700 text-xs text-slate-500" placeholder="White ID" value={liveWhiteId} onChange={e => setLiveWhiteId(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                        <input className="w-full bg-slate-950 p-2 rounded border border-slate-600 text-sm font-bold" placeholder="Black Name" value={liveBlack} onChange={e => setLiveBlack(e.target.value)} />
+                        <input className="w-full bg-slate-900 p-1 rounded border border-slate-700 text-xs text-slate-500" placeholder="Black ID" value={liveBlackId} onChange={e => setLiveBlackId(e.target.value)} />
+                    </div>
+                </div>
+                <button onClick={handleCreateLive} className="w-full bg-red-600 py-3 rounded font-black shadow-lg hover:bg-red-500 transition">PUBLISH LIVE 🚀</button>
+            </div>
 
-        {/* LISTS */}
-        <div className="grid md:grid-cols-2 gap-6">
+            {/* RIGHT: SCHEDULE MATCH */}
+            <div className="bg-slate-800 p-6 rounded-xl border border-amber-500/30 shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-amber-600"></div>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2"><span>📅</span> SCHEDULE</h2>
+                    <select className="bg-slate-900 border border-slate-600 text-xs rounded px-2 py-1 text-slate-300" value={schedCategory} onChange={e => setSchedCategory(e.target.value)}>
+                        <option value="Adults">Adults</option>
+                        <option value="Juniors">Juniors</option>
+                        <option value="Kids">Kids</option>
+                    </select>
+                </div>
+
+                <div className="mb-4">
+                    <input type="datetime-local" className="w-full bg-slate-950 p-3 rounded border border-slate-600 text-white scheme-dark text-sm" value={schedTime} onChange={e => setSchedTime(e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="space-y-1">
+                        <input className="w-full bg-slate-950 p-2 rounded border border-slate-600 text-sm font-bold" placeholder="White Name" value={schedWhite} onChange={e => setSchedWhite(e.target.value)} />
+                        <input className="w-full bg-slate-900 p-1 rounded border border-slate-700 text-xs text-slate-500" placeholder="White ID (Optional)" value={schedWhiteId} onChange={e => setSchedWhiteId(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                        <input className="w-full bg-slate-950 p-2 rounded border border-slate-600 text-sm font-bold" placeholder="Black Name" value={schedBlack} onChange={e => setSchedBlack(e.target.value)} />
+                        <input className="w-full bg-slate-900 p-1 rounded border border-slate-700 text-xs text-slate-500" placeholder="Black ID (Optional)" value={schedBlackId} onChange={e => setSchedBlackId(e.target.value)} />
+                    </div>
+                </div>
+                <button onClick={handleCreateScheduled} className="w-full bg-amber-600 py-3 rounded font-black shadow-lg hover:bg-amber-500 transition">ADD TO SCHEDULE 📅</button>
+            </div>
+        </div>
+      )}
+
+      {/* --- LISTS --- */}
+      <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-8">
           
-          {/* ACTIVE / SCHEDULED MATCHES */}
+          {/* ACTIVE & SCHEDULED */}
           <div>
-            <h2 className="text-sm font-bold text-green-400 mb-4 uppercase tracking-widest flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Active & Scheduled
-            </h2>
+            <h2 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Active & Scheduled</h2>
             <div className="space-y-3">
               {matches.filter(m => m.is_active).map(m => (
-                <div key={m.id} className={`bg-slate-800 p-4 rounded-xl border transition group ${editingId === m.id ? 'border-blue-500' : 'border-green-500/20 hover:border-green-500/40'}`}>
-                  <div className="flex justify-between items-start mb-3">
+                <div key={m.id} className={`bg-slate-800 p-4 rounded-xl border flex flex-col gap-2 ${m.lichess_url ? 'border-red-500/50' : 'border-amber-500/30'}`}>
+                  <div className="flex justify-between items-start">
                      <div>
                        <div className="font-bold text-lg text-slate-200">{m.white_display_name} <span className="text-slate-600 text-sm">vs</span> {m.black_display_name}</div>
-                       {/* STATUS INDICATOR */}
-                       <div className="text-xs font-bold mt-1">
-                         {m.lichess_url ? (
-                            <span className="text-red-400 flex items-center gap-1">🔴 LIVE NOW</span>
-                         ) : (
-                            <span className="text-amber-500 flex items-center gap-1">📅 Scheduled: {new Date(m.start_time).toLocaleString()}</span>
-                         )}
+                       <div className="text-xs font-bold mt-1 flex gap-2">
+                         <span className="bg-slate-700 px-1 rounded text-slate-300">{m.category}</span>
+                         {m.lichess_url ? <span className="text-red-400">🔴 LIVE</span> : <span className="text-amber-500">📅 {new Date(m.start_time).toLocaleString()}</span>}
                        </div>
                      </div>
                      <button onClick={() => startEdit(m)} className="text-slate-500 hover:text-blue-400 bg-slate-900/50 p-2 rounded-lg transition" title="Edit">✎</button>
                   </div>
-                  
-                  {/* --- SCORE RECORDING (ONLY IF LIVE) --- */}
-                  {m.lichess_url && (
-                    <div className="grid grid-cols-3 gap-2 mb-2">
-                        <button onClick={() => recordResult(m.id, "1 - 0")} className="bg-slate-900 hover:bg-green-900/50 border border-slate-700 hover:border-green-500 text-slate-300 hover:text-green-400 py-2 rounded font-bold text-xs transition">1 - 0</button>
-                        <button onClick={() => recordResult(m.id, "½ - ½")} className="bg-slate-900 hover:bg-amber-900/50 border border-slate-700 hover:border-amber-500 text-slate-300 hover:text-amber-400 py-2 rounded font-bold text-xs transition">½ - ½</button>
-                        <button onClick={() => recordResult(m.id, "0 - 1")} className="bg-slate-900 hover:bg-green-900/50 border border-slate-700 hover:border-green-500 text-slate-300 hover:text-green-400 py-2 rounded font-bold text-xs transition">0 - 1</button>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => toggleStatus(m.id, true)} className="flex-1 bg-slate-900 text-slate-400 py-2 rounded-lg hover:bg-slate-700 text-[10px] font-bold transition uppercase">Manual Archive</button>
-                    <button onClick={() => handleDelete(m.id)} className="bg-red-900/20 text-red-400 px-3 rounded-lg hover:bg-red-900/40 text-xs font-bold transition">DEL</button>
+                  <div className="mt-2">
+                     {!m.lichess_url && (
+                        <button onClick={() => promoteToLive(m)} className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-2 rounded mb-2 shadow-lg animate-pulse transition">📡 PASTE LINK & GO LIVE</button>
+                     )}
+                     {m.lichess_url && (
+                        <div className="grid grid-cols-3 gap-2 mb-2">
+                            <button onClick={() => recordResult(m.id, "1 - 0")} className="bg-slate-900 border border-slate-700 hover:border-green-500 text-slate-400 hover:text-green-400 py-1 rounded text-xs">1-0</button>
+                            <button onClick={() => recordResult(m.id, "½ - ½")} className="bg-slate-900 border border-slate-700 hover:border-amber-500 text-slate-400 hover:text-amber-400 py-1 rounded text-xs">Draw</button>
+                            <button onClick={() => recordResult(m.id, "0 - 1")} className="bg-slate-900 border border-slate-700 hover:border-green-500 text-slate-400 hover:text-green-400 py-1 rounded text-xs">0-1</button>
+                        </div>
+                     )}
+                     <div className="flex gap-2">
+                        <button onClick={() => toggleStatus(m.id, true)} className="flex-1 bg-slate-900 text-slate-400 py-1 rounded text-[10px] hover:text-white uppercase">Archive (Manual)</button>
+                        <button onClick={() => handleDelete(m.id)} className="flex-1 bg-red-900/20 text-red-500 hover:bg-red-900/40 text-[10px] py-1 rounded">Delete</button>
+                     </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* HISTORY MATCHES */}
+          {/* HISTORY */}
           <div>
-            <h2 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">History</h2>
+            <h2 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">History</h2>
             <div className="space-y-3">
               {matches.filter(m => !m.is_active).map(m => (
-                <div key={m.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-800 hover:border-slate-700 transition">
-                  <div className="flex justify-between items-start mb-3">
-                     <div className="font-bold text-slate-500">{m.white_display_name} vs {m.black_display_name}</div>
-                     <button onClick={() => startEdit(m)} className="text-slate-600 hover:text-white bg-slate-900/50 p-2 rounded-lg transition" title="Edit">✎</button>
+                <div key={m.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-800 opacity-75">
+                  <div className="flex justify-between items-start mb-2">
+                     <div className="font-bold text-slate-500 text-sm">{m.white_display_name} vs {m.black_display_name}</div>
+                     <span className="bg-slate-900 px-1 rounded text-[10px] text-slate-500 h-fit">{m.category}</span>
+                     <div className="text-amber-500 font-bold text-sm">{m.result}</div>
                   </div>
-                  
-                  {/* DISPLAY RESULT */}
-                  {m.result ? (
-                      <div className="bg-slate-900/50 text-center py-1 mb-3 rounded border border-slate-700 text-amber-500 font-mono font-bold text-sm">
-                        {m.result}
-                      </div>
-                  ) : (
-                      <div className="text-center py-1 mb-3 text-xs text-slate-600 italic">No result recorded</div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button onClick={() => toggleStatus(m.id, false)} className="flex-1 bg-green-900/20 text-green-600 py-2 rounded-lg hover:bg-green-900/40 text-[10px] uppercase font-bold transition">Restage Live</button>
-                    <button onClick={() => handleDelete(m.id)} className="bg-slate-900 text-slate-600 px-3 rounded-lg hover:text-red-400 text-xs font-bold transition">✕</button>
+                  <div className="flex gap-2 mt-2">
+                     <button onClick={() => toggleStatus(m.id, false)} className="text-green-600 hover:text-green-400 text-xs">Restore Live</button>
+                     <button onClick={() => handleDelete(m.id)} className="text-red-900 hover:text-red-500 text-xs">Delete Permanently</button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-
       </div>
     </div>
   );
