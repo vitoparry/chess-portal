@@ -14,7 +14,6 @@ export default function Live() {
         .order('created_at', { ascending: false });
       if (data) setMatches(data);
     };
-
     fetchMatches();
     const interval = setInterval(fetchMatches, 5000); 
     return () => clearInterval(interval);
@@ -24,12 +23,13 @@ export default function Live() {
     <main className="min-h-screen bg-slate-900 text-slate-100 font-sans">
       <header className="bg-slate-950 border-b border-slate-800 p-6 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex flex-col">
-             <h1 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
-                🔴 Live Arena
-             </h1>
-             <a href="/" className="text-xs text-slate-500 hover:text-white mt-1">← Back to Home</a>
-          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
+            🔴 Live Arena
+          </h1>
+          {/* NAVIGATION BUTTON NOW ON RIGHT */}
+          <a href="/" className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition font-bold text-sm border border-slate-700">
+            ← Home
+          </a>
         </div>
       </header>
 
@@ -44,46 +44,32 @@ export default function Live() {
           {matches.map((match) => (
             <div key={match.id} className="bg-slate-800 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col">
               
-              {/* Match Header */}
               <div className="bg-slate-900/50 p-3 md:p-4 flex justify-between items-center border-b border-slate-700">
-                
-                {/* White Player Block */}
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-100 border border-slate-300 shadow-[0_0_10px_rgba(255,255,255,0.5)] shrink-0"></div>
                   <div className="flex flex-col min-w-0">
-                      {/* Real Name (Big) */}
                       <span className="font-bold text-base md:text-xl leading-tight truncate">
                         {match.white_display_name || match.white_name}
                       </span>
-                      {/* Lichess ID (Small) */}
-                      <span className="text-[10px] md:text-xs text-slate-500 font-mono truncate">
-                        @{match.white_name}
-                      </span>
+                      <span className="text-[10px] md:text-xs text-slate-500 font-mono truncate">@{match.white_name}</span>
                   </div>
                 </div>
 
-                {/* VS Badge */}
                 <div className="px-2">
                   <div className="bg-slate-800 px-2 py-1 rounded text-[10px] md:text-xs font-mono text-slate-500 tracking-widest border border-slate-700">VS</div>
                 </div>
 
-                {/* Black Player Block */}
                 <div className="flex items-center justify-end gap-3 flex-1 min-w-0 text-right">
                   <div className="flex flex-col items-end min-w-0">
-                      {/* Real Name (Big) */}
                       <span className="font-bold text-base md:text-xl leading-tight truncate">
                         {match.black_display_name || match.black_name}
                       </span>
-                      {/* Lichess ID (Small) */}
-                      <span className="text-[10px] md:text-xs text-slate-500 font-mono truncate">
-                        @{match.black_name}
-                      </span>
+                      <span className="text-[10px] md:text-xs text-slate-500 font-mono truncate">@{match.black_name}</span>
                   </div>
                   <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-900 border border-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.5)] shrink-0"></div>
                 </div>
               </div>
 
-              {/* The Board */}
               <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3]">
                 <iframe 
                   src={`https://lichess.org/embed/${match.lichess_url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1]}?theme=auto&bg=auto`}

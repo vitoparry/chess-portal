@@ -3,10 +3,12 @@ export default function Rules() {
     <main className="min-h-screen bg-slate-900 text-slate-100 font-sans p-6 md:p-12">
       <div className="max-w-4xl mx-auto bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
         
-        {/* Header */}
+        {/* Header - Standardized */}
         <div className="mb-8 border-b border-slate-700 pb-4 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-amber-500">📜 Tournament Rules</h1>
-          <a href="/" className="text-sm text-slate-400 hover:text-white transition">← Back Home</a>
+          <a href="/" className="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition font-bold text-sm">
+            ← Home
+          </a>
         </div>
 
         {/* CONTENT */}
@@ -40,27 +42,37 @@ export default function Rules() {
             </ul>
           </section>
 
-          {/* Section 3 */}
+          {/* Section 3: Knockouts (UPDATED) */}
           <section>
-            <h2 className="text-xl font-bold text-white mb-3">Qualification to Knockouts</h2>
+            <h2 className="text-xl font-bold text-white mb-3">Knockout Stage</h2>
             <ul className="space-y-2 list-disc pl-5 marker:text-purple-500">
-              <li>The <strong>top two players</strong> from each group (A and B) qualify for the knockout stage.</li>
-              <li>Group ranking is based on total points scored in the round-robin games.</li>
+              <li>The <strong>top two players</strong> from each pool qualify for the knockout stage.</li>
+              <li>These four players form the bracket (Semifinals & Final).</li>
+              <li><strong>Tie-Breaks in Groups:</strong> If there is a tie for a qualifying spot:
+                 <ul className="list-disc pl-5 mt-2 text-slate-400">
+                    <li>5-minute blitz games are played between tied players.</li>
+                    <li>Blitz games are repeated until a winner is decided.</li>
+                 </ul>
+              </li>
             </ul>
           </section>
 
-          {/* Section 4 */}
-          <section>
-            <h2 className="text-xl font-bold text-white mb-3">Tie-Break Rules</h2>
-            <div className="bg-slate-900/30 p-4 rounded-lg">
-                <p className="mb-2 italic text-slate-400">If two or more players are tied for any qualifying position:</p>
-                <ul className="space-y-2 list-disc pl-5 marker:text-red-500">
-                <li>The tied players will play <strong>5-minute blitz games</strong>.</li>
-                <li>If more than two players are tied, a suitable mini play-off (round-robin or knockout) will be decided by the Arbiter.</li>
-                <li>Blitz games continue until a clear ranking is achieved.</li>
-                <li><strong>Colors:</strong> Decided by lot for the first game, then alternating.</li>
-                </ul>
-            </div>
+          {/* Section 4: Grand Final (UPDATED) */}
+          <section className="bg-amber-900/20 p-6 rounded-xl border border-amber-700/50">
+            <h2 className="text-xl font-bold text-amber-500 mb-3">🏆 The Grand Final</h2>
+            <p className="mb-4">The top two winners of the knockout table play a <strong>4-game Grand Final</strong>.</p>
+            
+            <h3 className="font-bold text-white mb-2">Game Format:</h3>
+            <ul className="space-y-2 list-decimal pl-5 marker:text-amber-500 text-slate-200">
+                <li><strong>2 Games:</strong> Standard (20 mins + 10 sec).</li>
+                <li><strong>2 Games:</strong> Blitz (5 mins).</li>
+            </ul>
+
+            <h3 className="font-bold text-white mt-4 mb-2">Tie-Breaker (If tied after 4 games):</h3>
+            <ul className="space-y-2 list-disc pl-5 marker:text-red-500 text-slate-300">
+                <li>Two additional 5-minute blitz games are played.</li>
+                <li>If still tied, additional pairs of 5-minute blitz games are played until a winner is decided.</li>
+            </ul>
           </section>
 
           {/* Section 5 */}
@@ -68,7 +80,6 @@ export default function Rules() {
             <h2 className="text-xl font-bold text-white mb-3">General Regulations</h2>
             <ul className="space-y-2 list-disc pl-5 marker:text-green-500">
               <li>All games must be played on <strong>lichess.org</strong>.</li>
-              <li>All games are played according to current FIDE Laws of Chess.</li>
               <li><strong>White Pieces:</strong> The player with White must send the link to their opponent.</li>
               <li>Any disputes not covered here will be decided by the Arbiter (Final Decision).</li>
             </ul>
