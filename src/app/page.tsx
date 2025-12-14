@@ -3,7 +3,6 @@ import Image from 'next/image';
 
 export default function Landing() {
   return (
-    // h-screen forces it to be exactly the height of the window (No Scroll)
     <main className="h-screen max-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-2 relative overflow-hidden">
       
       {/* Background decoration */}
@@ -11,7 +10,7 @@ export default function Landing() {
 
       <div className="relative z-10 w-full max-w-4xl flex flex-col items-center gap-4 md:gap-6 text-center">
         
-        {/* The Flyer Image - Height is locked to 35% of the screen height */}
+        {/* Flyer Image */}
         <div className="relative h-[35vh] w-auto aspect-[3/4] rounded-xl overflow-hidden shadow-2xl border-2 border-slate-800 hover:scale-[1.02] transition duration-500">
             <Image 
               src="/toruneyimage.jpg" 
@@ -26,7 +25,7 @@ export default function Landing() {
           STV CHAMPIONSHIP
         </h1>
 
-        {/* Navigation Grid - Compact Layout */}
+        {/* Navigation Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg">
           
           <Link href="/live" className="group col-span-1 md:col-span-2">
@@ -47,7 +46,6 @@ export default function Landing() {
             </button>
           </Link>
 
-          {/* Info Section */}
           <Link href="/rules" className="group">
             <button className="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg font-medium text-base border border-slate-600 text-slate-300 group-hover:text-white transition">
               📜 Rules
@@ -68,6 +66,14 @@ export default function Landing() {
 
         </div>
       </div>
+
+      {/* DISCREET ADMIN LINK (Footer) */}
+      <div className="absolute bottom-4 right-4 z-20">
+        <Link href="/admin" className="text-[10px] text-slate-700 hover:text-amber-600 transition uppercase tracking-widest font-bold flex items-center gap-1">
+          🔒 Admin Portal
+        </Link>
+      </div>
+
     </main>
   );
 }

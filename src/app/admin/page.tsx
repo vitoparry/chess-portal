@@ -2,16 +2,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 
-// 🔒 SECURITY: Only these emails can access the admin panel
-// REPLACE THESE WITH YOUR ACTUAL GMAIL ADDRESSES
-const ALLOWED_EMAILS = [
-  "pradeep.karavadi@gmail.com", 
-  "another.admin@gmail.com"
-];
-
 export default function Admin() {
   const [session, setSession] = useState<any>(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true); // New loading state for auth
   
   // Form State
   const [whiteId, setWhiteId] = useState('');
@@ -23,32 +17,45 @@ export default function Admin() {
   // System State
   const [loading, setLoading] = useState(false);
   const [matches, setMatches] = useState<any[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null); // Track which match we are editing
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // --- AUTHENTICATION ---
   useEffect(() => {
+    // 1. Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      checkAccess(session);
+      if (session) checkAccess(session.user.email);
+      else setCheckingAuth(false);
     });
 
+    // 2. Listen for login/logout events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      checkAccess(session);
+      if (session) checkAccess(session.user.email);
+      else setCheckingAuth(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const checkAccess = (session: any) => {
-    if (session?.user?.email) {
-      if (ALLOWED_EMAILS.includes(session.user.email)) {
-        setAccessDenied(false);
-        fetchAllMatches();
-      } else {
-        setAccessDenied(true);
-      }
+  // 3. Database Check: Is this email in the 'admins' table?
+  const checkAccess = async (email: string | undefined) => {
+    if (!email) return;
+    setCheckingAuth(true);
+
+    const { data } = await supabase
+      .from('admins')
+      .select('email')
+      .eq('email', email)
+      .single();
+
+    if (data) {
+      setAccessDenied(false);
+      fetchAllMatches();
+    } else {
+      setAccessDenied(true);
     }
+    setCheckingAuth(false);
   };
 
   const handleLogin = async () => {
@@ -61,6 +68,7 @@ export default function Admin() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setMatches([]);
+    setAccessDenied(false);
   };
 
   // --- DATA HANDLING ---
@@ -82,9 +90,7 @@ export default function Admin() {
     setLoading(false);
   };
 
-  // --- CORE ACTIONS ---
-
-  // 1. START EDITING
+  // --- ACTIONS ---
   const startEdit = (match: any) => {
     setEditingId(match.id);
     setLink(match.lichess_url);
@@ -92,11 +98,9 @@ export default function Admin() {
     setBlackId(match.black_name);
     setWhiteReal(match.white_display_name || '');
     setBlackReal(match.black_display_name || '');
-    // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // 2. CANCEL EDITING
   const cancelEdit = () => {
     setEditingId(null);
     setLink('');
@@ -104,11 +108,9 @@ export default function Admin() {
     setWhiteReal(''); setBlackReal('');
   };
 
-  // 3. PUBLISH (CREATE or UPDATE)
   const handlePublish = async () => {
     const finalWhiteName = whiteReal || whiteId;
     const finalBlackName = blackReal || blackId;
-
     const matchData = {
         white_name: whiteId,
         black_name: blackId,
@@ -119,23 +121,11 @@ export default function Admin() {
     };
 
     if (editingId) {
-        // UPDATE EXISTING MATCH
         const { error } = await supabase.from('live_matches').update(matchData).eq('id', editingId);
-        if (!error) {
-            cancelEdit(); // Reset form
-            fetchAllMatches();
-        } else {
-            alert("Error updating match");
-        }
+        if (!error) { cancelEdit(); fetchAllMatches(); }
     } else {
-        // CREATE NEW MATCH
         const { error } = await supabase.from('live_matches').insert([matchData]);
-        if (!error) {
-            cancelEdit(); // Reset form
-            fetchAllMatches();
-        } else {
-            alert("Error creating match");
-        }
+        if (!error) { cancelEdit(); fetchAllMatches(); }
     }
   };
 
@@ -147,130 +137,163 @@ export default function Admin() {
   const handleDelete = async (id: string) => {
     if (!confirm("Permanently delete?")) return;
     await supabase.from('live_matches').delete().eq('id', id);
-    if (editingId === id) cancelEdit(); // If we were editing this, clear the form
+    if (editingId === id) cancelEdit();
     fetchAllMatches();
   };
 
-  // --- RENDER ---
+  // --- RENDER VIEWS ---
+
+  // 0. LOADING SCREEN (While checking database)
+  if (checkingAuth && session) return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin text-4xl">⏳</div>
+      </div>
+  );
+
+  // 1. NOT LOGGED IN
   if (!session) return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 text-center max-w-md w-full">
-          <h1 className="text-3xl font-bold text-white mb-6">🔒 Admin Access</h1>
-          <button onClick={handleLogin} className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-200 text-slate-900 font-bold py-4 rounded-xl transition">
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" alt="G" />
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="bg-slate-900 p-10 rounded-2xl shadow-2xl border border-slate-800 text-center max-w-md w-full">
+          <div className="mb-6 bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-3xl">🔒</div>
+          <h1 className="text-2xl font-bold text-white mb-2">Admin Portal</h1>
+          <p className="text-slate-500 mb-8 text-sm">Authorized personnel only.</p>
+          
+          <button onClick={handleLogin} className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-200 text-slate-900 font-bold py-3 rounded-xl transition shadow-lg">
+            <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
             Sign in with Google
           </button>
+          
+          <a href="/" className="block mt-8 text-slate-600 hover:text-slate-400 text-xs uppercase tracking-widest font-bold transition">
+            ← Return to Tournament
+          </a>
         </div>
       </div>
   );
 
+  // 2. LOGGED IN BUT BLOCKED (Not in 'admins' table)
   if (accessDenied) return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="text-center text-white">
-          <h1 className="text-3xl font-bold text-red-500 mb-4">Access Denied</h1>
-          <p>Your email {session.user.email} is not authorized.</p>
-          <button onClick={handleLogout} className="mt-4 bg-slate-700 px-4 py-2 rounded">Logout</button>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="bg-slate-900 p-8 rounded-2xl border border-red-900/50 shadow-[0_0_50px_rgba(220,38,38,0.1)] text-center max-w-md w-full relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-orange-600"></div>
+          <div className="mb-6 text-5xl">🚫</div>
+          <h1 className="text-2xl font-bold text-red-500 mb-2">Authorization Failed</h1>
+          <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+            The account <strong>{session.user.email}</strong> is not listed in the <code>admins</code> database.
+          </p>
+          <div className="flex flex-col gap-3">
+             <button onClick={handleLogout} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg border border-slate-700 transition font-medium">
+               Sign out
+             </button>
+             <a href="/" className="text-slate-500 hover:text-white text-xs py-2 transition">
+               Return to Home
+             </a>
+          </div>
         </div>
       </div>
   );
 
+  // 3. ADMIN DASHBOARD
   return (
     <div className="min-h-screen bg-slate-900 text-white p-6 font-sans">
       <header className="max-w-5xl mx-auto mb-8 flex justify-between items-center">
         <div className="flex items-center gap-4">
            <h1 className="text-3xl font-bold text-amber-500">Admin Control</h1>
-           <span className="text-xs bg-green-900 text-green-300 px-2 py-1 rounded-full border border-green-700">{session.user.email}</span>
+           <span className="text-xs bg-green-900/50 text-green-400 px-3 py-1 rounded-full border border-green-800 font-mono">
+             {session.user.email}
+           </span>
         </div>
         <div className="flex gap-4">
-            <a href="/" className="text-slate-400 hover:text-white py-2">Go Home</a>
-            <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded hover:bg-slate-700 transition">Logout</button>
+            <a href="/" className="text-slate-400 hover:text-white py-2 text-sm font-bold">View Site ↗</a>
+            <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded hover:bg-slate-700 transition text-sm">Logout</button>
         </div>
       </header>
 
       <div className="max-w-5xl mx-auto grid gap-8">
         
         {/* INPUT FORM */}
-        <div className={`p-6 rounded-xl border shadow-xl transition-colors duration-300 ${editingId ? 'bg-blue-900/20 border-blue-500' : 'bg-slate-800 border-slate-700'}`}>
+        <div className={`p-6 rounded-xl border shadow-xl transition-all duration-300 ${editingId ? 'bg-slate-800 border-blue-500 ring-1 ring-blue-500/50' : 'bg-slate-800 border-slate-700'}`}>
            <div className="flex justify-between items-center mb-4">
-             <h2 className="text-lg font-bold text-slate-300">
-               {editingId ? '✏️ Editing Match...' : '🚀 New Match Entry'}
+             <h2 className="text-lg font-bold text-slate-300 flex items-center gap-2">
+               {editingId ? <span className="text-blue-400">✏️ Edit Mode</span> : <span>🚀 New Match</span>}
              </h2>
              {editingId && (
-               <button onClick={cancelEdit} className="text-sm text-red-400 hover:text-red-300 underline">Cancel Edit</button>
+               <button onClick={cancelEdit} className="text-xs bg-slate-900 px-3 py-1 rounded text-slate-400 hover:text-white border border-slate-700 transition">
+                 Cancel
+               </button>
              )}
            </div>
            
            <div className="flex gap-2 mb-6">
-             <input className="flex-1 bg-slate-950 p-3 rounded border border-slate-600 focus:border-amber-500 outline-none" placeholder="Paste Lichess Link" value={link} onChange={e => setLink(e.target.value)} />
-             <button onClick={fetchLichessData} disabled={loading} className="bg-blue-600 px-6 rounded font-bold hover:bg-blue-500 disabled:opacity-50">{loading ? '...' : 'Auto-Fill'}</button>
+             <input className="flex-1 bg-slate-950 p-3 rounded-lg border border-slate-600 focus:border-amber-500 outline-none transition" placeholder="Paste Lichess Link" value={link} onChange={e => setLink(e.target.value)} />
+             <button onClick={fetchLichessData} disabled={loading} className="bg-blue-600 px-6 rounded-lg font-bold hover:bg-blue-500 disabled:opacity-50 transition shadow-lg text-sm tracking-wide">
+               {loading ? '...' : 'AUTO-FILL'}
+             </button>
            </div>
 
            <div className="grid grid-cols-2 gap-6 mb-6">
              <div className="space-y-2">
-                <label className="text-xs text-slate-400 uppercase font-bold tracking-wider">White Player</label>
-                <input className="w-full bg-slate-950 p-3 rounded border border-slate-500 text-amber-400 font-bold" placeholder="Real Name" value={whiteReal} onChange={e => setWhiteReal(e.target.value)} />
-                <input className="w-full bg-slate-900 p-2 rounded border border-slate-700 text-sm text-slate-400" placeholder="Lichess ID" value={whiteId} onChange={e => setWhiteId(e.target.value)} />
+                <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">White Player</label>
+                <input className="w-full bg-slate-950 p-3 rounded-lg border border-slate-500 text-white font-bold focus:ring-1 focus:ring-white outline-none" placeholder="Real Name" value={whiteReal} onChange={e => setWhiteReal(e.target.value)} />
+                <input className="w-full bg-slate-900/50 p-2 rounded border border-slate-800 text-xs text-slate-500 font-mono" placeholder="Lichess ID" value={whiteId} onChange={e => setWhiteId(e.target.value)} />
              </div>
              <div className="space-y-2">
-                <label className="text-xs text-slate-400 uppercase font-bold tracking-wider">Black Player</label>
-                <input className="w-full bg-slate-950 p-3 rounded border border-slate-500 text-amber-400 font-bold" placeholder="Real Name" value={blackReal} onChange={e => setBlackReal(e.target.value)} />
-                <input className="w-full bg-slate-900 p-2 rounded border border-slate-700 text-sm text-slate-400" placeholder="Lichess ID" value={blackId} onChange={e => setBlackId(e.target.value)} />
+                <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Black Player</label>
+                <input className="w-full bg-slate-950 p-3 rounded-lg border border-slate-500 text-white font-bold focus:ring-1 focus:ring-white outline-none" placeholder="Real Name" value={blackReal} onChange={e => setBlackReal(e.target.value)} />
+                <input className="w-full bg-slate-900/50 p-2 rounded border border-slate-800 text-xs text-slate-500 font-mono" placeholder="Lichess ID" value={blackId} onChange={e => setBlackId(e.target.value)} />
              </div>
            </div>
 
            <button 
              onClick={handlePublish} 
-             className={`w-full py-4 rounded font-bold text-lg shadow-lg transition transform active:scale-95 ${editingId ? 'bg-blue-600 hover:bg-blue-500' : 'bg-green-600 hover:bg-green-500'}`}
+             className={`w-full py-4 rounded-xl font-black text-lg shadow-lg transition transform active:scale-[0.98] ${editingId ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20' : 'bg-green-600 hover:bg-green-500 shadow-green-900/20'}`}
            >
-             {editingId ? 'UPDATE MATCH 💾' : 'GO LIVE 🚀'}
+             {editingId ? 'UPDATE MATCH' : 'GO LIVE'}
            </button>
         </div>
 
         {/* LISTS */}
         <div className="grid md:grid-cols-2 gap-6">
-          
-          {/* LIVE MATCHES */}
           <div>
-            <h2 className="text-xl font-bold text-green-400 mb-4">🔴 Live Now</h2>
+            <h2 className="text-sm font-bold text-green-400 mb-4 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live Now
+            </h2>
             <div className="space-y-3">
               {matches.filter(m => m.is_active).map(m => (
-                <div key={m.id} className={`bg-slate-800 p-4 rounded border flex flex-col gap-2 ${editingId === m.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-green-500/30'}`}>
-                  <div className="flex justify-between items-start">
+                <div key={m.id} className={`bg-slate-800 p-4 rounded-xl border transition group ${editingId === m.id ? 'border-blue-500' : 'border-green-500/20 hover:border-green-500/40'}`}>
+                  <div className="flex justify-between items-start mb-3">
                      <div>
-                       <div className="font-bold text-lg">{m.white_display_name} vs {m.black_display_name}</div>
-                       <div className="text-xs text-slate-500">ID: {m.white_name} vs {m.black_name}</div>
+                       <div className="font-bold text-lg text-slate-200">{m.white_display_name} <span className="text-slate-600 text-sm">vs</span> {m.black_display_name}</div>
                      </div>
-                     <button onClick={() => startEdit(m)} className="text-blue-400 hover:text-white bg-slate-900 p-2 rounded" title="Edit details">✎</button>
-                  </div>
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => toggleStatus(m.id, true)} className="flex-1 bg-slate-700 text-slate-300 py-1 rounded hover:bg-slate-600">⬇ Archive</button>
-                    <button onClick={() => handleDelete(m.id)} className="bg-red-900/50 text-red-400 px-3 rounded hover:bg-red-900">Del</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ARCHIVE MATCHES */}
-          <div>
-            <h2 className="text-xl font-bold text-slate-400 mb-4">📂 Archive</h2>
-            <div className="space-y-3">
-              {matches.filter(m => !m.is_active).map(m => (
-                <div key={m.id} className="bg-slate-800/50 p-4 rounded border border-slate-700 flex flex-col gap-2 opacity-75">
-                  <div className="flex justify-between items-start">
-                     <div className="font-bold text-slate-400">{m.white_display_name} vs {m.black_display_name}</div>
-                     <button onClick={() => startEdit(m)} className="text-slate-500 hover:text-white bg-slate-900 p-2 rounded" title="Edit details">✎</button>
+                     <button onClick={() => startEdit(m)} className="text-slate-500 hover:text-blue-400 bg-slate-900/50 p-2 rounded-lg transition" title="Edit">✎</button>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => toggleStatus(m.id, false)} className="flex-1 bg-green-900/30 text-green-400 py-1 rounded hover:bg-green-900/50">⬆ Go Live</button>
-                    <button onClick={() => handleDelete(m.id)} className="bg-red-900/30 text-red-400 px-3 rounded hover:bg-red-900">Del</button>
+                    <button onClick={() => toggleStatus(m.id, true)} className="flex-1 bg-slate-900 text-slate-400 py-2 rounded-lg hover:bg-slate-700 text-xs font-bold transition">⬇ ARCHIVE</button>
+                    <button onClick={() => handleDelete(m.id)} className="bg-red-900/20 text-red-400 px-3 rounded-lg hover:bg-red-900/40 text-xs font-bold transition">DEL</button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
+          <div>
+            <h2 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">History</h2>
+            <div className="space-y-3">
+              {matches.filter(m => !m.is_active).map(m => (
+                <div key={m.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-800 hover:border-slate-700 transition">
+                  <div className="flex justify-between items-start mb-3">
+                     <div className="font-bold text-slate-500">{m.white_display_name} vs {m.black_display_name}</div>
+                     <button onClick={() => startEdit(m)} className="text-slate-600 hover:text-white bg-slate-900/50 p-2 rounded-lg transition" title="Edit">✎</button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => toggleStatus(m.id, false)} className="flex-1 bg-green-900/20 text-green-600 py-2 rounded-lg hover:bg-green-900/40 text-xs font-bold transition">⬆ RESTORE</button>
+                    <button onClick={() => handleDelete(m.id)} className="bg-slate-900 text-slate-600 px-3 rounded-lg hover:text-red-400 text-xs font-bold transition">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
   );
