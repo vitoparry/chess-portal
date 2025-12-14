@@ -3,9 +3,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 
 // 🔒 SECURITY: Only these emails can access the admin panel
+// REPLACE THESE WITH YOUR ACTUAL GMAIL ADDRESSES
 const ALLOWED_EMAILS = [
-  "pradeepkaravadi@gmail.com", // <--- ENSURE YOUR EMAIL IS HERE
-  "anotherxxx.admin@gmail.com"
+  "pradeep.karavadi@gmail.com", 
+  "another.admin@gmail.com"
 ];
 
 export default function Admin() {
@@ -40,11 +41,13 @@ export default function Admin() {
   }, []);
 
   const checkAccess = (session: any) => {
-    if (session?.user?.email && ALLOWED_EMAILS.includes(session.user.email)) {
-      setAccessDenied(false);
-      fetchAllMatches();
-    } else if (session?.user?.email) {
-      setAccessDenied(true);
+    if (session?.user?.email) {
+      if (ALLOWED_EMAILS.includes(session.user.email)) {
+        setAccessDenied(false);
+        fetchAllMatches();
+      } else {
+        setAccessDenied(true);
+      }
     }
   };
 
@@ -178,7 +181,10 @@ export default function Admin() {
            <h1 className="text-3xl font-bold text-amber-500">Admin Control</h1>
            <span className="text-xs bg-green-900 text-green-300 px-2 py-1 rounded-full border border-green-700">{session.user.email}</span>
         </div>
-        <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded hover:bg-slate-700 transition">Logout</button>
+        <div className="flex gap-4">
+            <a href="/" className="text-slate-400 hover:text-white py-2">Go Home</a>
+            <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded hover:bg-slate-700 transition">Logout</button>
+        </div>
       </header>
 
       <div className="max-w-5xl mx-auto grid gap-8">
@@ -222,6 +228,8 @@ export default function Admin() {
 
         {/* LISTS */}
         <div className="grid md:grid-cols-2 gap-6">
+          
+          {/* LIVE MATCHES */}
           <div>
             <h2 className="text-xl font-bold text-green-400 mb-4">🔴 Live Now</h2>
             <div className="space-y-3">
@@ -236,4 +244,34 @@ export default function Admin() {
                   </div>
                   <div className="flex gap-2 mt-2">
                     <button onClick={() => toggleStatus(m.id, true)} className="flex-1 bg-slate-700 text-slate-300 py-1 rounded hover:bg-slate-600">⬇ Archive</button>
-                    <button onClick={() => handleDelete
+                    <button onClick={() => handleDelete(m.id)} className="bg-red-900/50 text-red-400 px-3 rounded hover:bg-red-900">Del</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ARCHIVE MATCHES */}
+          <div>
+            <h2 className="text-xl font-bold text-slate-400 mb-4">📂 Archive</h2>
+            <div className="space-y-3">
+              {matches.filter(m => !m.is_active).map(m => (
+                <div key={m.id} className="bg-slate-800/50 p-4 rounded border border-slate-700 flex flex-col gap-2 opacity-75">
+                  <div className="flex justify-between items-start">
+                     <div className="font-bold text-slate-400">{m.white_display_name} vs {m.black_display_name}</div>
+                     <button onClick={() => startEdit(m)} className="text-slate-500 hover:text-white bg-slate-900 p-2 rounded" title="Edit details">✎</button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => toggleStatus(m.id, false)} className="flex-1 bg-green-900/30 text-green-400 py-1 rounded hover:bg-green-900/50">⬆ Go Live</button>
+                    <button onClick={() => handleDelete(m.id)} className="bg-red-900/30 text-red-400 px-3 rounded hover:bg-red-900">Del</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
