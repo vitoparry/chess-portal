@@ -5,9 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import Papa from 'papaparse';
 
-// 📊 DATA CONFIG
-const CACHE_DURATION = 30 * 60 * 1000; // 30 Minutes in milliseconds
-
+// 📊 CONFIG: DATA SOURCES
 const DATA_SOURCES = [
   { 
     category: 'Adults', 
@@ -26,13 +24,18 @@ const DATA_SOURCES = [
   }
 ];
 
+// ⏳ CACHE DURATION (30 Minutes)
+const CACHE_KEY = 'stv_dashboard_data_v2';
+const CACHE_TIME_KEY = 'stv_dashboard_time_v2';
+const CACHE_DURATION_MS = 30 * 60 * 1000;
+
 export default function Landing() {
   const [liveMatches, setLiveMatches] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({}); 
   const [leaders, setLeaders] = useState<any>({});
   const [loadingStats, setLoadingStats] = useState(true);
 
-  // 1. Fetch Live Matches (Always fetch fresh for live status)
+  // 1. Fetch Live Matches (Always Fresh)
   useEffect(() => {
     const fetchMatches = async () => {
       let { data } = await supabase
@@ -47,24 +50,24 @@ export default function Landing() {
     fetchMatches();
   }, []);
 
-  // 2. Fetch CSV Data (With 30-min Cache)
+  // 2. Fetch CSV Data (With 30-min Cache & Improved Parsing)
   useEffect(() => {
     const fetchCSVData = async () => {
-      // ⚡ CHECK CACHE FIRST
-      const cachedData = localStorage.getItem('stv_dashboard_cache');
-      const cachedTime = localStorage.getItem('stv_dashboard_time');
-      const now = new Date().getTime();
+      // ⚡ CHECK CACHE
+      const cached = localStorage.getItem(CACHE_KEY);
+      const timestamp = localStorage.getItem(CACHE_TIME_KEY);
+      const now = Date.now();
 
-      if (cachedData && cachedTime && (now - parseInt(cachedTime) < CACHE_DURATION)) {
-        console.log("⚡ Loading data from cache (fast)");
-        const parsed = JSON.parse(cachedData);
+      if (cached && timestamp && (now - parseInt(timestamp) < CACHE_DURATION_MS)) {
+        console.log("⚡ Loaded data from cache");
+        const parsed = JSON.parse(cached);
         setStats(parsed.stats);
         setLeaders(parsed.leaders);
         setLoadingStats(false);
-        return; 
+        return;
       }
 
-      console.log("🔄 Fetching fresh CSV data...");
+      console.log("🔄 Fetching fresh data...");
       const newStats: any = {};
       const newLeaders: any = {};
 
@@ -88,34 +91,55 @@ export default function Landing() {
           // --- B. Process Standings (Leaderboard) ---
           const standingsRes = await fetch(source.standings);
           const standingsText = await standingsRes.text();
-          // Use 'transformHeader' to normalize column names (remove spaces, lowercase)
+          
+          // 🔧 PARSING FIX: Use header:false to access columns by INDEX (A=0, B=1, etc.)
           const standingsParsed = Papa.parse(standingsText, { 
-             header: true, 
-             skipEmptyLines: true,
-             transformHeader: (h) => h.trim().toLowerCase() 
+             header: false, // Turn off headers to access by Index
+             skipEmptyLines: true 
           });
           
-          const rows: any[] = standingsParsed.data;
+          const rawRows = standingsParsed.data as string[][]; // Array of arrays
           
-          // 1. Map rows to a clean structure
-          const players = rows.map((r: any) => {
-             // Look for 'nickname' first (Column B), fallbacks included
-             const name = r['nickname'] || r['player name'] || r['name'] || r['white player'] || 'Unknown';
-             
-             // Look for points
-             let pts = r['points'] || r['pts'] || r['total'] || r['score'] || '0';
-             
-             return {
-                 name: name,
-                 points: parseFloat(pts) || 0
-             };
+          // Remove the first row if it contains "Rank" or "Name" (It's a header row)
+          const dataRows = rawRows.filter(row => {
+             const firstCell = row[0]?.toString().toLowerCase();
+             return firstCell !== 'rank' && firstCell !== '#' && firstCell !== 'pos';
           });
 
-          // 2. 🔢 SORT by Points (Highest to Lowest)
-          players.sort((a, b) => b.points - a.points);
+          // Map rows to players
+          const players = dataRows.map((row) => {
+             // 🎯 TARGET: Column B (Index 1) for Nickname
+             // Fallback to Column C (Index 2) if B is empty
+             const name = row[1] ? row[1].trim() : (row[2] ? row[2].trim() : 'Unknown');
+             
+             // 🎯 TARGET: Find the Points (Usually last column or explicitly named)
+             // We look for the first valid number starting from column 3
+             let points = 0;
+             for(let i = 2; i < row.length; i++) {
+                const val = parseFloat(row[i]);
+                if(!isNaN(val)) {
+                    points = val; 
+                    // Don't break immediately, sometimes there are round scores. 
+                    // Usually "Total" is the last numeric column or specifically usually around index 4-5.
+                    // For safety in chess standings, Total is often the largest number found.
+                }
+             }
+             // Alternative: If you know Total is always Column E (Index 4), use row[4]
+             // Trying to grab the last column is often safe for "Total"
+             const lastCol = parseFloat(row[row.length - 1]);
+             if(!isNaN(lastCol)) points = lastCol;
 
-          // 3. Take Top 3
-          newLeaders[source.category] = players.slice(0, 3).map((p, i) => ({
+             return { name, points };
+          });
+
+          // Filter out rows with empty names or 0 points if desired (optional)
+          const validPlayers = players.filter(p => p.name !== 'Unknown' && p.name !== '');
+
+          // Sort Descending
+          validPlayers.sort((a, b) => b.points - a.points);
+
+          // Take Top 3
+          newLeaders[source.category] = validPlayers.slice(0, 3).map((p, i) => ({
               ...p,
               rank: i + 1
           }));
@@ -123,13 +147,13 @@ export default function Landing() {
         } catch (e) { console.error(`Error loading ${source.category}`, e); }
       }
 
-      // Update State & Save to Cache
       setStats(newStats);
       setLeaders(newLeaders);
       setLoadingStats(false);
       
-      localStorage.setItem('stv_dashboard_cache', JSON.stringify({ stats: newStats, leaders: newLeaders }));
-      localStorage.setItem('stv_dashboard_time', now.toString());
+      // Save to Cache
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ stats: newStats, leaders: newLeaders }));
+      localStorage.setItem(CACHE_TIME_KEY, now.toString());
     };
 
     fetchCSVData();
@@ -138,12 +162,11 @@ export default function Landing() {
   return (
     <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 relative overflow-x-hidden">
       
-      {/* Background decoration */}
       <div className="fixed top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black z-0 pointer-events-none"></div>
 
       <div className="w-full max-w-[1400px] grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 relative z-10">
 
-        {/* ================= LEFT COLUMN (3/12): FLYER ================= */}
+        {/* LEFT: Flyer */}
         <div className="md:col-span-3 flex flex-col items-center md:items-start justify-center gap-6 order-1">
             <div className="relative w-[70%] md:w-full aspect-[3/4] rounded-xl overflow-hidden shadow-2xl border-2 border-slate-800 hover:scale-[1.02] transition duration-500">
                 <Image src="/toruneyimage.jpg" alt="Tournament Flyer" fill className="object-cover" priority />
@@ -153,10 +176,9 @@ export default function Landing() {
             </h1>
         </div>
 
-        {/* ================= CENTER COLUMN (5/12): BUTTONS ================= */}
+        {/* CENTER: Buttons */}
         <div className="md:col-span-5 flex flex-col justify-center gap-6 w-full order-2">
             
-            {/* Live Ticker */}
             {liveMatches.length > 0 && (
             <div className="w-full bg-slate-900/80 p-3 rounded-xl border border-slate-800 backdrop-blur-sm">
                 <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
@@ -183,7 +205,6 @@ export default function Landing() {
             </div>
             )}
 
-            {/* BUTTONS */}
             <div className="flex flex-col gap-4">
                 <Link href="/live" className="group w-full">
                     <button className="w-full py-5 bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 rounded-2xl font-black text-2xl shadow-[0_0_20px_rgba(220,38,38,0.2)] transition transform group-hover:-translate-y-1 flex items-center justify-center gap-2 border border-red-500/30">
@@ -217,10 +238,10 @@ export default function Landing() {
             </div>
         </div>
 
-        {/* ================= RIGHT COLUMN (4/12): DASHBOARD ================= */}
+        {/* RIGHT: Dashboard */}
         <div className="md:col-span-4 flex flex-col gap-5 h-full order-3 w-full">
             
-            {/* 1. 🏆 LEADERBOARD */}
+            {/* Leaderboard */}
             <div className="bg-slate-900/50 rounded-2xl p-5 border border-slate-800 shadow-xl backdrop-blur-sm h-full">
                 <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-800 pb-2">
                     <span>👑</span> Top Leaders
@@ -250,7 +271,7 @@ export default function Landing() {
                 </div>
             </div>
 
-            {/* 2. 📊 INSIGHTS */}
+            {/* Insights */}
             <div className="bg-slate-900/50 rounded-2xl p-5 border border-slate-800 shadow-xl backdrop-blur-sm">
                 <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-800 pb-2">
                     <span>📊</span> Matches Played
