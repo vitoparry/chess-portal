@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import Papa from 'papaparse';
 
-// 📊 DATA SOURCES CONFIGURATION
+// 📊 DATA CONFIG
+const CACHE_DURATION = 30 * 60 * 1000; // 30 Minutes in milliseconds
+
 const DATA_SOURCES = [
   { 
     category: 'Adults', 
@@ -30,7 +32,7 @@ export default function Landing() {
   const [leaders, setLeaders] = useState<any>({});
   const [loadingStats, setLoadingStats] = useState(true);
 
-  // 1. Fetch Live Matches
+  // 1. Fetch Live Matches (Always fetch fresh for live status)
   useEffect(() => {
     const fetchMatches = async () => {
       let { data } = await supabase
@@ -45,15 +47,30 @@ export default function Landing() {
     fetchMatches();
   }, []);
 
-  // 2. Fetch CSV Data
+  // 2. Fetch CSV Data (With 30-min Cache)
   useEffect(() => {
     const fetchCSVData = async () => {
+      // ⚡ CHECK CACHE FIRST
+      const cachedData = localStorage.getItem('stv_dashboard_cache');
+      const cachedTime = localStorage.getItem('stv_dashboard_time');
+      const now = new Date().getTime();
+
+      if (cachedData && cachedTime && (now - parseInt(cachedTime) < CACHE_DURATION)) {
+        console.log("⚡ Loading data from cache (fast)");
+        const parsed = JSON.parse(cachedData);
+        setStats(parsed.stats);
+        setLeaders(parsed.leaders);
+        setLoadingStats(false);
+        return; 
+      }
+
+      console.log("🔄 Fetching fresh CSV data...");
       const newStats: any = {};
       const newLeaders: any = {};
 
       for (const source of DATA_SOURCES) {
         try {
-          // A. Fetch Rounds
+          // --- A. Process Rounds (Matches Played) ---
           const roundsRes = await fetch(source.rounds);
           const roundsText = await roundsRes.text();
           const roundsParsed = Papa.parse(roundsText, { header: true, skipEmptyLines: true });
@@ -68,27 +85,53 @@ export default function Landing() {
           
           newStats[source.category] = { completed: completedCount };
 
-          // B. Fetch Standings
+          // --- B. Process Standings (Leaderboard) ---
           const standingsRes = await fetch(source.standings);
           const standingsText = await standingsRes.text();
-          const standingsParsed = Papa.parse(standingsText, { header: true, skipEmptyLines: true });
+          // Use 'transformHeader' to normalize column names (remove spaces, lowercase)
+          const standingsParsed = Papa.parse(standingsText, { 
+             header: true, 
+             skipEmptyLines: true,
+             transformHeader: (h) => h.trim().toLowerCase() 
+          });
           
           const rows: any[] = standingsParsed.data;
           
-          // 🔧 FIX: Now specifically looks for "Nickname" column
-          const top3 = rows.slice(0, 3).map((r: any) => ({
-             name: r['Nickname'] || r['Player Name'] || r['Name'] || 'Unknown', 
-             points: r['Points'] || r['Pts'] || '0',
-             rank: r['Rank'] || r['#']
+          // 1. Map rows to a clean structure
+          const players = rows.map((r: any) => {
+             // Look for 'nickname' first (Column B), fallbacks included
+             const name = r['nickname'] || r['player name'] || r['name'] || r['white player'] || 'Unknown';
+             
+             // Look for points
+             let pts = r['points'] || r['pts'] || r['total'] || r['score'] || '0';
+             
+             return {
+                 name: name,
+                 points: parseFloat(pts) || 0
+             };
+          });
+
+          // 2. 🔢 SORT by Points (Highest to Lowest)
+          players.sort((a, b) => b.points - a.points);
+
+          // 3. Take Top 3
+          newLeaders[source.category] = players.slice(0, 3).map((p, i) => ({
+              ...p,
+              rank: i + 1
           }));
-          newLeaders[source.category] = top3;
 
         } catch (e) { console.error(`Error loading ${source.category}`, e); }
       }
+
+      // Update State & Save to Cache
       setStats(newStats);
       setLeaders(newLeaders);
       setLoadingStats(false);
+      
+      localStorage.setItem('stv_dashboard_cache', JSON.stringify({ stats: newStats, leaders: newLeaders }));
+      localStorage.setItem('stv_dashboard_time', now.toString());
     };
+
     fetchCSVData();
   }, []);
 
@@ -166,7 +209,6 @@ export default function Landing() {
                     </Link>
                 </div>
                 
-                {/* 🔧 FIX: Match Archive is now a proper button */}
                 <Link href="/archive" className="group">
                      <button className="w-full py-3 bg-slate-900 hover:bg-slate-800 rounded-xl font-bold text-sm border border-slate-700 text-slate-500 hover:text-slate-300 transition uppercase tracking-widest shadow-lg">
                         📂 Match Archive
@@ -196,9 +238,9 @@ export default function Landing() {
                                     <div key={i} className="flex justify-between items-center bg-slate-950/50 p-2 rounded border border-slate-800/50">
                                         <div className="flex items-center gap-3">
                                             <span className={`font-mono font-bold w-4 text-center ${i===0 ? 'text-yellow-400' : 'text-slate-600'}`}>{i+1}</span>
-                                            <span className="text-xs font-bold text-slate-300 truncate max-w-[120px]">{p.name}</span>
+                                            <span className="text-xs font-bold text-slate-300 truncate max-w-[140px]">{p.name}</span>
                                         </div>
-                                        <span className="text-xs font-bold text-slate-400">{p.points}</span>
+                                        <span className="text-xs font-bold text-slate-400">{p.points} pts</span>
                                     </div>
                                 ))
                                 }

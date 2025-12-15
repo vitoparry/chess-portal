@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabaseClient';
-import Papa from 'papaparse'; // 📦 Ensure you ran: npm install papaparse
+import Papa from 'papaparse'; 
 
 // 📊 CONFIG: Links to your ROUNDS sheets
 const ROUNDS_SHEETS = [
@@ -10,13 +10,13 @@ const ROUNDS_SHEETS = [
   { category: 'Kids', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSOj-HR4exbW-YvxAjDSe_l83xGXNbty52DoFhJQQqk7U97KVtKnh9F2QcG1Dn9z3hK9C6eGKqJA9ln/pub?gid=756584123&single=true&output=csv' }
 ];
 
-// 🔧 CONFIG: Map Excel Headers to our code (Based on your screenshot)
+// 🔧 CONFIG: Map Excel Headers
 const EXCEL_COLUMNS = {
-  WhiteName: 'White',             // Column F
-  BlackName: 'Black',             // Column G
-  Link: 'Lichess Match URL',      // Column I
-  WhitePoints: 'White Points',    // Column J
-  BlackPoints: 'Black Points'     // Column K
+  WhiteName: 'White',             
+  BlackName: 'Black',             
+  Link: 'Lichess Match URL',      
+  WhitePoints: 'White Points',    
+  BlackPoints: 'Black Points'     
 };
 
 export default function Admin() {
@@ -54,7 +54,7 @@ export default function Admin() {
   // SYSTEM
   const [loading, setLoading] = useState(false);
   const [matches, setMatches] = useState<any[]>([]);
-  const [syncStatus, setSyncStatus] = useState(''); // Feedback for Sync button
+  const [syncStatus, setSyncStatus] = useState('');
 
   // --- AUTH ---
   useEffect(() => {
@@ -96,7 +96,27 @@ export default function Admin() {
     setLoading(false);
   };
 
-  // --- 🤖 SYNC FROM SHEETS FUNCTION ---
+  // 🛡️ HELPER: CHECK FOR DUPLICATES
+  const checkDuplicateMatch = async (url: string) => {
+    const gameId = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
+    if (!gameId) return null;
+
+    const { data } = await supabase
+      .from('live_matches')
+      .select('is_active, managed_by') // Fetch who managed it
+      .ilike('lichess_url', `%${gameId}%`)
+      .maybeSingle();
+
+    if (data) {
+        const status = data.is_active ? "LIVE BOARD" : "ARCHIVE";
+        const admin = data.managed_by || "another admin";
+        alert(`⚠️ DUPLICATE WARNING!\n\nThis match is already in the ${status}.\nIt was managed by: ${admin}`);
+        return true; // Duplicate found
+    }
+    return false; // No duplicate
+  };
+
+  // --- 🤖 SYNC FROM SHEETS ---
   const handleSheetSync = async () => {
     setSyncStatus('Fetching sheets...');
     let addedCount = 0;
@@ -105,21 +125,17 @@ export default function Admin() {
         try {
             const response = await fetch(sheet.url);
             const csvText = await response.text();
-            
-            // Parse CSV
             const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
             const rows: any[] = parsed.data;
 
             for (const row of rows) {
-                // 1. Get Link
                 const link = row[EXCEL_COLUMNS.Link];
-                if (!link || !link.includes('lichess.org/')) continue; // Skip if no valid link
+                if (!link || !link.includes('lichess.org/')) continue; 
 
-                // 2. Extract Game ID to check duplicates
+                // Check Duplicates internally (no alert for sync)
                 const gameId = link.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
                 if (!gameId) continue;
 
-                // 3. Check if exists in DB (Avoid duplicates)
                 const { data: existing } = await supabase
                     .from('live_matches')
                     .select('id')
@@ -127,62 +143,123 @@ export default function Admin() {
                     .maybeSingle();
 
                 if (!existing) {
-                    // 4. Calculate Result from Points
                     const wPts = row[EXCEL_COLUMNS.WhitePoints];
                     const bPts = row[EXCEL_COLUMNS.BlackPoints];
                     let resultString = null;
-
-                    // Convert Excel points to our "1 - 0" format
                     if (wPts == '1') resultString = '1 - 0';
                     else if (bPts == '1') resultString = '0 - 1';
                     else if (wPts == '0.5' || wPts == '½') resultString = '½ - ½';
-                    else if (wPts && bPts) resultString = `${wPts} - ${bPts}`; // Fallback
+                    else if (wPts && bPts) resultString = `${wPts} - ${bPts}`; 
 
-                    // 5. INSERT NEW ARCHIVED MATCH
                     const whiteName = row[EXCEL_COLUMNS.WhiteName] || 'Unknown';
                     const blackName = row[EXCEL_COLUMNS.BlackName] || 'Unknown';
 
                     await supabase.from('live_matches').insert([{
                         white_display_name: whiteName,
                         black_display_name: blackName,
-                        white_name: whiteName, // Use real name as ID if ID is missing in sheet
+                        white_name: whiteName, 
                         black_name: blackName, 
                         lichess_url: link,
                         category: sheet.category, 
                         result: resultString,
-                        is_active: false // Goes straight to archive
+                        is_active: false,
+                        managed_by: session.user.email // Track the syncer
                     }]);
                     addedCount++;
                 }
             }
-        } catch (error) {
-            console.error(`Error syncing ${sheet.category}:`, error);
-        }
+        } catch (error) { console.error(`Error syncing ${sheet.category}:`, error); }
     }
-
-    setSyncStatus(addedCount > 0 ? `✅ Success! Added ${addedCount} new matches.` : '✅ Up to date.');
+    setSyncStatus(addedCount > 0 ? `✅ Added ${addedCount} new matches.` : '✅ Up to date.');
     setTimeout(() => setSyncStatus(''), 5000);
     fetchAllMatches();
   };
 
   // --- ACTIONS ---
   const handleCreateLive = async () => {
+    // 1. Check Duplicate
+    if (await checkDuplicateMatch(liveLink)) return;
+
+    // 2. Insert with managed_by
     const { error } = await supabase.from('live_matches').insert([{ 
         white_name: liveWhiteId, black_name: liveBlackId,
         white_display_name: liveWhite || liveWhiteId, black_display_name: liveBlack || liveBlackId,
-        lichess_url: liveLink, is_active: true, category: liveCategory
+        lichess_url: liveLink, is_active: true, category: liveCategory,
+        managed_by: session.user.email
     }]);
     if (!error) { setLiveLink(''); setLiveWhite(''); setLiveBlack(''); setLiveWhiteId(''); setLiveBlackId(''); fetchAllMatches(); }
   };
 
   const handleCreateScheduled = async () => {
     if (!schedTime) return alert("Please select a time");
+    // Scheduled matches don't have links usually, so no duplicate check needed yet
     const { error } = await supabase.from('live_matches').insert([{ 
         white_name: schedWhiteId || 'TBD', black_name: schedBlackId || 'TBD',
         white_display_name: schedWhite, black_display_name: schedBlack,
-        start_time: new Date(schedTime).toISOString(), is_active: true, category: schedCategory
+        start_time: new Date(schedTime).toISOString(), is_active: true, category: schedCategory,
+        managed_by: session.user.email
     }]);
     if (!error) { setSchedTime(''); setSchedWhite(''); setSchedBlack(''); setSchedWhiteId(''); setSchedBlackId(''); fetchAllMatches(); }
+  };
+
+  const handleUpdate = async () => {
+    // If updating link, check duplicate (excluding self)
+    // For simplicity, we skip complex self-check here, assuming edit is safe
+    const { error } = await supabase.from('live_matches').update({
+        white_display_name: editWhite, black_display_name: editBlack,
+        white_name: editWhiteId, black_name: editBlackId,
+        lichess_url: editLink, category: editCategory,
+        start_time: editTime ? new Date(editTime).toISOString() : null,
+        managed_by: session.user.email // Update the manager
+    }).eq('id', editingId);
+    if (!error) { setEditingId(null); fetchAllMatches(); }
+  };
+
+  const promoteToLive = async (match: any) => {
+    const url = prompt(`Paste Lichess URL for ${match.white_display_name} vs ${match.black_display_name}`);
+    if (!url || !url.includes('lichess.org/')) return;
+    
+    // Check Duplicate before promoting
+    if (await checkDuplicateMatch(url)) return;
+
+    let wId = match.white_name; let bId = match.black_name;
+    const gameId = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
+    try {
+        const res = await fetch(`https://lichess.org/game/export/${gameId}?moves=false&clocks=false&evals=false`);
+        const text = await res.text();
+        wId = text.match(/\[White "(.+?)"\]/)?.[1] || wId;
+        bId = text.match(/\[Black "(.+?)"\]/)?.[1] || bId;
+    } catch(e) {}
+
+    await supabase.from('live_matches').update({ 
+        lichess_url: url, white_name: wId, black_name: bId, is_active: true,
+        managed_by: session.user.email 
+    }).eq('id', match.id);
+    fetchAllMatches();
+  };
+
+  const recordResult = async (id: string, result: string) => {
+    if(!confirm(`End match: ${result}?`)) return;
+    await supabase.from('live_matches').update({ 
+        result: result, is_active: false,
+        managed_by: session.user.email // Update manager on archive
+    }).eq('id', id);
+    fetchAllMatches();
+  };
+
+  const toggleStatus = async (id: string, currentStatus: boolean) => {
+    await supabase.from('live_matches').update({ 
+        is_active: !currentStatus,
+        managed_by: session.user.email 
+    }).eq('id', id);
+    fetchAllMatches();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete?")) return;
+    await supabase.from('live_matches').delete().eq('id', id);
+    if(editingId === id) setEditingId(null);
+    fetchAllMatches();
   };
 
   const startEdit = (match: any) => {
@@ -199,49 +276,6 @@ export default function Admin() {
         setEditTime(localIso);
     } else { setEditTime(''); }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleUpdate = async () => {
-    const { error } = await supabase.from('live_matches').update({
-        white_display_name: editWhite, black_display_name: editBlack,
-        white_name: editWhiteId, black_name: editBlackId,
-        lichess_url: editLink, category: editCategory,
-        start_time: editTime ? new Date(editTime).toISOString() : null,
-    }).eq('id', editingId);
-    if (!error) { setEditingId(null); fetchAllMatches(); }
-  };
-
-  const promoteToLive = async (match: any) => {
-    const url = prompt(`Paste Lichess URL for ${match.white_display_name} vs ${match.black_display_name}`);
-    if (!url || !url.includes('lichess.org/')) return;
-    
-    let wId = match.white_name; let bId = match.black_name;
-    const gameId = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
-    try {
-        const res = await fetch(`https://lichess.org/game/export/${gameId}?moves=false&clocks=false&evals=false`);
-        const text = await res.text();
-        wId = text.match(/\[White "(.+?)"\]/)?.[1] || wId;
-        bId = text.match(/\[Black "(.+?)"\]/)?.[1] || bId;
-    } catch(e) {}
-
-    await supabase.from('live_matches').update({ lichess_url: url, white_name: wId, black_name: bId, is_active: true }).eq('id', match.id);
-    fetchAllMatches();
-  };
-
-  const recordResult = async (id: string, result: string) => {
-    if(!confirm(`End match: ${result}?`)) return;
-    await supabase.from('live_matches').update({ result: result, is_active: false }).eq('id', id);
-    fetchAllMatches();
-  };
-  const toggleStatus = async (id: string, currentStatus: boolean) => {
-    await supabase.from('live_matches').update({ is_active: !currentStatus }).eq('id', id);
-    fetchAllMatches();
-  };
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete?")) return;
-    await supabase.from('live_matches').delete().eq('id', id);
-    if(editingId === id) setEditingId(null);
-    fetchAllMatches();
   };
 
   // --- RENDER ---
@@ -264,7 +298,6 @@ export default function Admin() {
            <span className="text-xs bg-green-900/50 text-green-400 px-3 py-1 rounded-full border border-green-800 font-mono">{session.user.email}</span>
         </div>
         <div className="flex flex-wrap gap-4 items-center justify-center">
-            {/* 🤖 SYNC BUTTON */}
             <button onClick={handleSheetSync} disabled={!!syncStatus} className="bg-purple-700 hover:bg-purple-600 border border-purple-500 px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition flex items-center gap-2">
                 {syncStatus ? <span className="animate-pulse">{syncStatus}</span> : <span>🔄 Sync from Excel</span>}
             </button>
@@ -273,7 +306,7 @@ export default function Admin() {
         </div>
       </header>
 
-      {/* --- EDIT MODE OVERLAY --- */}
+      {/* --- EDIT OVERLAY --- */}
       {editingId ? (
         <div className="max-w-3xl mx-auto bg-slate-800 p-6 rounded-xl border border-blue-500 shadow-2xl mb-12 animate-in fade-in zoom-in duration-300">
            <div className="flex justify-between items-center mb-6">
@@ -393,6 +426,8 @@ export default function Admin() {
                          <span className="bg-slate-700 px-1 rounded text-slate-300">{m.category}</span>
                          {m.lichess_url ? <span className="text-red-400">🔴 LIVE</span> : <span className="text-amber-500">📅 {new Date(m.start_time).toLocaleString()}</span>}
                        </div>
+                       {/* SHOW ADMIN INFO */}
+                       {m.managed_by && <div className="text-[9px] text-slate-600 mt-1">Managed by: {m.managed_by}</div>}
                      </div>
                      <button onClick={() => startEdit(m)} className="text-slate-500 hover:text-blue-400 bg-slate-900/50 p-2 rounded-lg transition" title="Edit">✎</button>
                   </div>
@@ -428,6 +463,7 @@ export default function Admin() {
                      <span className="bg-slate-900 px-1 rounded text-[10px] text-slate-500 h-fit">{m.category}</span>
                      <div className="text-amber-500 font-bold text-sm">{m.result}</div>
                   </div>
+                  {m.managed_by && <div className="text-[9px] text-slate-700">Archived by: {m.managed_by}</div>}
                   <div className="flex gap-2 mt-2">
                      <button onClick={() => toggleStatus(m.id, false)} className="text-green-600 hover:text-green-400 text-xs">Restore Live</button>
                      <button onClick={() => handleDelete(m.id)} className="text-red-900 hover:text-red-500 text-xs">Delete Permanently</button>
