@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabaseClient';
-import Papa from 'papaparse'; 
+import Papa from 'papaparse';
+import { logAction } from '../../utils/logger'; // 🔍 IMPORTED LOGGER
 
 // 📊 CONFIG: Links to your ROUNDS sheets
 const ROUNDS_SHEETS = [
@@ -103,7 +104,7 @@ export default function Admin() {
 
     const { data } = await supabase
       .from('live_matches')
-      .select('is_active, managed_by') // Fetch who managed it
+      .select('is_active, managed_by') 
       .ilike('lichess_url', `%${gameId}%`)
       .maybeSingle();
 
@@ -111,9 +112,9 @@ export default function Admin() {
         const status = data.is_active ? "LIVE BOARD" : "ARCHIVE";
         const admin = data.managed_by || "another admin";
         alert(`⚠️ DUPLICATE WARNING!\n\nThis match is already in the ${status}.\nIt was managed by: ${admin}`);
-        return true; // Duplicate found
+        return true; 
     }
-    return false; // No duplicate
+    return false; 
   };
 
   // --- 🤖 SYNC FROM SHEETS ---
@@ -132,7 +133,6 @@ export default function Admin() {
                 const link = row[EXCEL_COLUMNS.Link];
                 if (!link || !link.includes('lichess.org/')) continue; 
 
-                // Check Duplicates internally (no alert for sync)
                 const gameId = link.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1];
                 if (!gameId) continue;
 
@@ -163,13 +163,14 @@ export default function Admin() {
                         category: sheet.category, 
                         result: resultString,
                         is_active: false,
-                        managed_by: session.user.email // Track the syncer
+                        managed_by: session.user.email 
                     }]);
                     addedCount++;
                 }
             }
         } catch (error) { console.error(`Error syncing ${sheet.category}:`, error); }
     }
+    if (addedCount > 0) logAction(session.user.email, 'SYNC', `Synced ${addedCount} matches from Excel`);
     setSyncStatus(addedCount > 0 ? `✅ Added ${addedCount} new matches.` : '✅ Up to date.');
     setTimeout(() => setSyncStatus(''), 5000);
     fetchAllMatches();
@@ -177,49 +178,52 @@ export default function Admin() {
 
   // --- ACTIONS ---
   const handleCreateLive = async () => {
-    // 1. Check Duplicate
     if (await checkDuplicateMatch(liveLink)) return;
 
-    // 2. Insert with managed_by
     const { error } = await supabase.from('live_matches').insert([{ 
         white_name: liveWhiteId, black_name: liveBlackId,
         white_display_name: liveWhite || liveWhiteId, black_display_name: liveBlack || liveBlackId,
         lichess_url: liveLink, is_active: true, category: liveCategory,
         managed_by: session.user.email
     }]);
-    if (!error) { setLiveLink(''); setLiveWhite(''); setLiveBlack(''); setLiveWhiteId(''); setLiveBlackId(''); fetchAllMatches(); }
+    if (!error) { 
+        logAction(session.user.email, 'CREATE_LIVE', `Created live match: ${liveWhite} vs ${liveBlack}`);
+        setLiveLink(''); setLiveWhite(''); setLiveBlack(''); setLiveWhiteId(''); setLiveBlackId(''); fetchAllMatches(); 
+    }
   };
 
   const handleCreateScheduled = async () => {
     if (!schedTime) return alert("Please select a time");
-    // Scheduled matches don't have links usually, so no duplicate check needed yet
     const { error } = await supabase.from('live_matches').insert([{ 
         white_name: schedWhiteId || 'TBD', black_name: schedBlackId || 'TBD',
         white_display_name: schedWhite, black_display_name: schedBlack,
         start_time: new Date(schedTime).toISOString(), is_active: true, category: schedCategory,
         managed_by: session.user.email
     }]);
-    if (!error) { setSchedTime(''); setSchedWhite(''); setSchedBlack(''); setSchedWhiteId(''); setSchedBlackId(''); fetchAllMatches(); }
+    if (!error) { 
+        logAction(session.user.email, 'SCHEDULE', `Scheduled match: ${schedWhite} vs ${schedBlack}`);
+        setSchedTime(''); setSchedWhite(''); setSchedBlack(''); setSchedWhiteId(''); setSchedBlackId(''); fetchAllMatches(); 
+    }
   };
 
   const handleUpdate = async () => {
-    // If updating link, check duplicate (excluding self)
-    // For simplicity, we skip complex self-check here, assuming edit is safe
     const { error } = await supabase.from('live_matches').update({
         white_display_name: editWhite, black_display_name: editBlack,
         white_name: editWhiteId, black_name: editBlackId,
         lichess_url: editLink, category: editCategory,
         start_time: editTime ? new Date(editTime).toISOString() : null,
-        managed_by: session.user.email // Update the manager
+        managed_by: session.user.email
     }).eq('id', editingId);
-    if (!error) { setEditingId(null); fetchAllMatches(); }
+    if (!error) { 
+        logAction(session.user.email, 'UPDATE', `Updated match details for ID: ${editingId}`);
+        setEditingId(null); fetchAllMatches(); 
+    }
   };
 
   const promoteToLive = async (match: any) => {
     const url = prompt(`Paste Lichess URL for ${match.white_display_name} vs ${match.black_display_name}`);
     if (!url || !url.includes('lichess.org/')) return;
     
-    // Check Duplicate before promoting
     if (await checkDuplicateMatch(url)) return;
 
     let wId = match.white_name; let bId = match.black_name;
@@ -235,6 +239,8 @@ export default function Admin() {
         lichess_url: url, white_name: wId, black_name: bId, is_active: true,
         managed_by: session.user.email 
     }).eq('id', match.id);
+    
+    logAction(session.user.email, 'PROMOTE', `Promoted scheduled match to LIVE: ${match.white_display_name} vs ${match.black_display_name}`);
     fetchAllMatches();
   };
 
@@ -242,8 +248,10 @@ export default function Admin() {
     if(!confirm(`End match: ${result}?`)) return;
     await supabase.from('live_matches').update({ 
         result: result, is_active: false,
-        managed_by: session.user.email // Update manager on archive
+        managed_by: session.user.email 
     }).eq('id', id);
+    
+    logAction(session.user.email, 'RESULT', `Recorded result ${result} for match ID: ${id}`);
     fetchAllMatches();
   };
 
@@ -252,12 +260,16 @@ export default function Admin() {
         is_active: !currentStatus,
         managed_by: session.user.email 
     }).eq('id', id);
+    
+    logAction(session.user.email, 'STATUS_CHANGE', `Changed active status to ${!currentStatus} for match ID: ${id}`);
     fetchAllMatches();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete?")) return;
     await supabase.from('live_matches').delete().eq('id', id);
+    
+    logAction(session.user.email, 'DELETE', `Deleted match ID: ${id}`);
     if(editingId === id) setEditingId(null);
     fetchAllMatches();
   };
@@ -276,6 +288,14 @@ export default function Admin() {
         setEditTime(localIso);
     } else { setEditTime(''); }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setLink('');
+    setWhiteId(''); setBlackId('');
+    setWhiteReal(''); setBlackReal('');
+    setStartTime('');
   };
 
   // --- RENDER ---
@@ -302,6 +322,9 @@ export default function Admin() {
                 {syncStatus ? <span className="animate-pulse">{syncStatus}</span> : <span>🔄 Sync from Excel</span>}
             </button>
             <a href="/" className="text-slate-400 hover:text-white py-2 text-sm font-bold">View Site ↗</a>
+            {session.user.email === 'pradeepkaravadi@gmail.com' && (
+                <a href="/admin/audit" className="bg-red-900/30 text-red-400 hover:text-white px-4 py-2 rounded text-sm font-bold border border-red-900/50">Audit Logs</a>
+            )}
             <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded text-sm">Logout</button>
         </div>
       </header>
@@ -311,7 +334,7 @@ export default function Admin() {
         <div className="max-w-3xl mx-auto bg-slate-800 p-6 rounded-xl border border-blue-500 shadow-2xl mb-12 animate-in fade-in zoom-in duration-300">
            <div className="flex justify-between items-center mb-6">
              <h2 className="text-xl font-bold text-blue-400">✏️ Editing Match</h2>
-             <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-white">Cancel</button>
+             <button onClick={cancelEdit} className="text-slate-400 hover:text-white">Cancel</button>
            </div>
            
            <div className="flex gap-4 mb-4">
