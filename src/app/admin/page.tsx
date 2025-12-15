@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import Papa from 'papaparse';
-import { logAction } from '../../utils/logger'; // 🔍 IMPORTED LOGGER
+import { logAction } from '../../utils/logger';
 
 // 📊 CONFIG: Links to your ROUNDS sheets
 const ROUNDS_SHEETS = [
@@ -322,9 +322,6 @@ export default function Admin() {
                 {syncStatus ? <span className="animate-pulse">{syncStatus}</span> : <span>🔄 Sync from Excel</span>}
             </button>
             <a href="/" className="text-slate-400 hover:text-white py-2 text-sm font-bold">View Site ↗</a>
-            {session.user.email === 'pradeepkaravadi@gmail.com' && (
-                <a href="/admin/audit" className="bg-red-900/30 text-red-400 hover:text-white px-4 py-2 rounded text-sm font-bold border border-red-900/50">Audit Logs</a>
-            )}
             <button onClick={handleLogout} className="bg-slate-800 border border-slate-600 px-4 py-2 rounded text-sm">Logout</button>
         </div>
       </header>
