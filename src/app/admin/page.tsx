@@ -292,10 +292,13 @@ export default function Admin() {
 
   const cancelEdit = () => {
     setEditingId(null);
-    setLink('');
-    setWhiteId(''); setBlackId('');
-    setWhiteReal(''); setBlackReal('');
-    setStartTime('');
+    setEditLink('');
+    setEditWhite('');
+    setEditBlack('');
+    setEditWhiteId('');
+    setEditBlackId('');
+    setEditTime('');
+    setEditCategory('Adults');
   };
 
   // --- RENDER ---
