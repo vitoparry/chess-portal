@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import Papa from 'papaparse';
 
-// 📊 DATA SOURCES CONFIGURATION
+// 📊 CONFIG: DATA SOURCES
 const DATA_SOURCES = [
   { 
     category: 'Adults', 
@@ -24,9 +24,9 @@ const DATA_SOURCES = [
   }
 ];
 
-// ⏳ CACHE SETTINGS (Reduced to 1 min for faster updates)
-const CACHE_KEY = 'stv_dashboard_data_v4';
-const CACHE_TIME_KEY = 'stv_dashboard_time_v4';
+// ⏳ CACHE SETTINGS (1 minute cache)
+const CACHE_KEY = 'stv_dashboard_data_v5';
+const CACHE_TIME_KEY = 'stv_dashboard_time_v5';
 const CACHE_DURATION_MS = 1 * 60 * 1000; 
 
 export default function Landing() {
@@ -35,7 +35,7 @@ export default function Landing() {
   const [leaders, setLeaders] = useState<any>({});
   const [loadingStats, setLoadingStats] = useState(true);
 
-  // 1. Fetch Live Matches (Always Fresh)
+  // 1. Fetch Live Matches
   useEffect(() => {
     const fetchMatches = async () => {
       let { data } = await supabase
@@ -50,16 +50,15 @@ export default function Landing() {
     fetchMatches();
   }, []);
 
-  // 2. Fetch CSV Data (With Cache)
+  // 2. Fetch CSV Data (Stats & Leaders)
   useEffect(() => {
     const fetchCSVData = async () => {
-      // ⚡ CHECK CACHE
+      // Check Cache
       const cached = localStorage.getItem(CACHE_KEY);
       const timestamp = localStorage.getItem(CACHE_TIME_KEY);
       const now = Date.now();
 
       if (cached && timestamp && (now - parseInt(timestamp) < CACHE_DURATION_MS)) {
-        console.log("⚡ Loaded data from cache");
         const parsed = JSON.parse(cached);
         setStats(parsed.stats);
         setLeaders(parsed.leaders);
@@ -67,13 +66,12 @@ export default function Landing() {
         return;
       }
 
-      console.log("🔄 Fetching fresh data...");
       const newStats: any = {};
       const newLeaders: any = {};
 
       for (const source of DATA_SOURCES) {
         try {
-          // --- A. Process Rounds (Matches Played) ---
+          // --- A. Process Rounds (Matches Played Stats) ---
           const roundsRes = await fetch(source.rounds);
           const roundsText = await roundsRes.text();
           const roundsParsed = Papa.parse(roundsText, { 
@@ -83,7 +81,7 @@ export default function Landing() {
           });
           
           const completedCount = roundsParsed.data.filter((r: any) => {
-            // Robust column finder: look for "points", "pts", or "score" in header
+            // Find scoring columns robustly
             const keys = Object.keys(r);
             const wKey = keys.find(k => k.includes('white') && (k.includes('point') || k.includes('pts') || k.includes('score')));
             const bKey = keys.find(k => k.includes('black') && (k.includes('point') || k.includes('pts') || k.includes('score')));
@@ -97,7 +95,6 @@ export default function Landing() {
             const w = parseFloat(wStr) || 0;
             const b = parseFloat(bStr) || 0;
 
-            // If Total Score > 0, match is played
             return (w + b) > 0;
           }).length;
           
@@ -109,32 +106,35 @@ export default function Landing() {
           const standingsParsed = Papa.parse(standingsText, { header: false, skipEmptyLines: true });
           
           const rawRows = standingsParsed.data as string[][];
+          
+          // Filter out header rows (rows containing "Rank" or "Pos")
           const dataRows = rawRows.filter(row => {
              const firstCell = row[0]?.toString().toLowerCase();
              return firstCell !== 'rank' && firstCell !== '#' && firstCell !== 'pos';
           });
 
           const players = dataRows.map((row) => {
-             // Try Column B (Index 1) for Nickname, else Column C
-             const name = row[1] ? row[1].trim() : (row[2] ? row[2].trim() : 'Unknown');
+             // Nickname is in Column B (index 1)
+             const name = row[1] ? row[1].trim() : 'Unknown';
              
-             // Find points (scan valid numbers)
+             // Scan for Points (usually towards the end)
              let points = 0;
              for(let i = 2; i < row.length; i++) {
                 const val = parseFloat(row[i]);
                 if(!isNaN(val)) points = val;
              }
              return { name, points };
-          }).filter(p => p.name !== 'Unknown' && p.name !== '');
+          })
+          // Filter: Must have a name and > 0 points
+          .filter(p => p.name !== 'Unknown' && p.name !== '' && p.points > 0);
 
-          // Sort Descending
+          // Sort Highest to Lowest
           players.sort((a, b) => b.points - a.points);
 
-          // Get Top 3 scores, including ties
+          // Get Top 3 Scores (handling ties)
           const uniqueScores = Array.from(new Set(players.map(p => p.points))).slice(0, 3);
           const topPlayers = players.filter(p => uniqueScores.includes(p.points));
           
-          // Assign visual ranks (1st, 2nd, 3rd)
           newLeaders[source.category] = topPlayers.map(p => ({
               ...p,
               rank: uniqueScores.indexOf(p.points) + 1
@@ -163,7 +163,7 @@ export default function Landing() {
           100% { transform: translateY(-50%); }
         }
         .animate-vertical-scroll {
-          /* SLOWED DOWN SPEED to 45s */
+          /* SLOW SPEED: 45 seconds for a smooth drift */
           animation: vertical-scroll 45s linear infinite;
         }
         .animate-vertical-scroll:hover {
@@ -188,6 +188,7 @@ export default function Landing() {
         {/* CENTER: Buttons */}
         <div className="md:col-span-5 flex flex-col justify-center gap-6 w-full order-2">
             
+            {/* LIVE TICKER */}
             {liveMatches.length > 0 && (
             <div className="w-full bg-slate-900/80 p-3 rounded-xl border border-slate-800 backdrop-blur-sm">
                 <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
@@ -214,6 +215,7 @@ export default function Landing() {
             </div>
             )}
 
+            {/* BUTTON GRID */}
             <div className="flex flex-col gap-4">
                 <Link href="/live" className="group w-full">
                     <button className="w-full py-5 bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 rounded-2xl font-black text-2xl shadow-[0_0_20px_rgba(220,38,38,0.2)] transition transform group-hover:-translate-y-1 flex items-center justify-center gap-2 border border-red-500/30">

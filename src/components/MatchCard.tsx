@@ -1,41 +1,39 @@
 "use client";
 import React from 'react';
 
-// Define the shape of our match data
 interface MatchProps {
   match: any;
-  showScore?: boolean; // Option to show score (for Archive)
+  showScore?: boolean;
 }
 
-// 🧠 MEMOIZED COMPONENT
-// This wrapper prevents the Iframe from reloading unless data explicitly changes
+// 🧠 MEMOIZED COMPONENT: This stops the flickering/scrolling issues
 const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
   
-  // Helper to extract Game ID
   const getGameId = (url: string) => {
-    const match = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
+    const match = url?.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
     return match ? match[1] : null;
   };
 
   const gameId = match.lichess_url ? getGameId(match.lichess_url) : null;
 
   return (
-    <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full">
+    <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full transition duration-300 hover:shadow-2xl hover:border-slate-600">
       
       {/* HEADER */}
       <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700">
-        {/* White */}
-        <div className={`flex flex-col min-w-0 flex-1 ${match.result === '1 - 0' ? 'text-green-400' : 'text-slate-200'}`}>
+        
+        {/* White Player */}
+        <div className={`flex flex-col min-w-0 flex-1 ${match.result && match.result.startsWith('1') ? 'text-green-400' : 'text-slate-200'}`}>
             <span className="font-bold text-sm md:text-base truncate">
               {match.white_display_name || match.white_name}
             </span>
             <span className="text-[10px] text-slate-500 font-mono truncate">@{match.white_name}</span>
         </div>
 
-        {/* Center Badge */}
-        <div className="px-3 text-center">
+        {/* Center Badge (VS or Score) */}
+        <div className="px-2 text-center min-w-[60px]">
            {showScore && match.result ? (
-             <div className="text-lg font-bold font-mono text-amber-500 bg-slate-950 px-2 rounded border border-slate-800">
+             <div className="text-sm md:text-base font-black font-mono text-amber-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">
                {match.result}
              </div>
            ) : (
@@ -43,8 +41,8 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
            )}
         </div>
 
-        {/* Black */}
-        <div className={`flex flex-col items-end min-w-0 flex-1 text-right ${match.result === '0 - 1' ? 'text-green-400' : 'text-slate-200'}`}>
+        {/* Black Player */}
+        <div className={`flex flex-col items-end min-w-0 flex-1 text-right ${match.result && match.result.endsWith('1') ? 'text-green-400' : 'text-slate-200'}`}>
             <span className="font-bold text-sm md:text-base truncate">
               {match.black_display_name || match.black_name}
             </span>
@@ -52,7 +50,7 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
         </div>
       </div>
 
-      {/* BOARD AREA (The Protected Zone) */}
+      {/* BOARD AREA */}
       <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950">
         {gameId ? (
           <iframe 
@@ -62,17 +60,18 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
             allowFullScreen
           ></iframe>
         ) : (
-          /* Scheduled Placeholder */
+          /* Placeholder for Scheduled Matches */
           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
              <span className="text-4xl mb-2">📅</span>
-             <div className="text-sm font-bold text-amber-500">
+             <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Scheduled</div>
+             <div className="text-sm font-bold text-amber-500 mt-1">
                 {new Date(match.start_time).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}
              </div>
           </div>
         )}
       </div>
 
-      {/* FOOTER */}
+      {/* FOOTER LINK */}
       {match.lichess_url && (
         <a 
           href={match.lichess_url} 
@@ -86,7 +85,7 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
     </div>
   );
 }, (prev, next) => {
-  // 🛡️ CUSTOM COMPARISON: Only re-render if these specific fields change
+  // 🛡️ RE-RENDER GUARD: Only update if these specific values change
   return (
     prev.match.id === next.match.id &&
     prev.match.lichess_url === next.match.lichess_url &&
