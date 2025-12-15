@@ -1,7 +1,8 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import { Analytics } from "@vercel/analytics/react" // <--- IMPORT THIS
+import { Analytics } from "@vercel/analytics/react"
+import NavBar from '../components/NavBar' // Import NavBar
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,7 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         
-        {/* 🦁 CLUB LOGO OVERLAY */}
+        {/* Club Logo */}
         <div className="fixed top-2 left-2 z-50 mix-blend-plus-lighter opacity-90 hover:opacity-100 transition duration-300">
            <a href="/" title="Back to Home">
              <img 
@@ -30,11 +31,12 @@ export default function RootLayout({
            </a>
         </div>
 
+        {/* Global Navigation */}
+        <NavBar />
+
         {children}
         
-        {/* 📊 ANALYTICS COMPONENT */}
         <Analytics /> 
-
       </body>
     </html>
   )
