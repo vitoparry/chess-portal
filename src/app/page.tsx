@@ -58,7 +58,6 @@ export default function Landing() {
           const roundsText = await roundsRes.text();
           const roundsParsed = Papa.parse(roundsText, { header: true, skipEmptyLines: true });
           
-          // Count completed matches (Total Score > 0)
           const completedCount = roundsParsed.data.filter((r: any) => {
             let wStr = r['White Points'] || '0';
             let bStr = r['Black Points'] || '0';
@@ -75,8 +74,10 @@ export default function Landing() {
           const standingsParsed = Papa.parse(standingsText, { header: true, skipEmptyLines: true });
           
           const rows: any[] = standingsParsed.data;
+          
+          // 🔧 FIX: Now specifically looks for "Nickname" column
           const top3 = rows.slice(0, 3).map((r: any) => ({
-             name: r['Player Name'] || r['Name'] || r['Player'] || 'Unknown',
+             name: r['Nickname'] || r['Player Name'] || r['Name'] || 'Unknown', 
              points: r['Points'] || r['Pts'] || '0',
              rank: r['Rank'] || r['#']
           }));
@@ -92,13 +93,11 @@ export default function Landing() {
   }, []);
 
   return (
-    // MAIN CONTAINER: Flex center to keep everything in the middle vertically
     <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 relative overflow-x-hidden">
       
       {/* Background decoration */}
       <div className="fixed top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black z-0 pointer-events-none"></div>
 
-      {/* 📦 MAX-WIDTH CONTAINER: This pulls everything away from the edges */}
       <div className="w-full max-w-[1400px] grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 relative z-10">
 
         {/* ================= LEFT COLUMN (3/12): FLYER ================= */}
@@ -167,14 +166,19 @@ export default function Landing() {
                     </Link>
                 </div>
                 
-                <Link href="/archive" className="w-full py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition uppercase tracking-widest font-bold">📂 Match Archive</Link>
+                {/* 🔧 FIX: Match Archive is now a proper button */}
+                <Link href="/archive" className="group">
+                     <button className="w-full py-3 bg-slate-900 hover:bg-slate-800 rounded-xl font-bold text-sm border border-slate-700 text-slate-500 hover:text-slate-300 transition uppercase tracking-widest shadow-lg">
+                        📂 Match Archive
+                     </button>
+                </Link>
             </div>
         </div>
 
         {/* ================= RIGHT COLUMN (4/12): DASHBOARD ================= */}
         <div className="md:col-span-4 flex flex-col gap-5 h-full order-3 w-full">
             
-            {/* 1. 🏆 LEADERBOARD (No Scroll, Full Height) */}
+            {/* 1. 🏆 LEADERBOARD */}
             <div className="bg-slate-900/50 rounded-2xl p-5 border border-slate-800 shadow-xl backdrop-blur-sm h-full">
                 <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-800 pb-2">
                     <span>👑</span> Top Leaders
@@ -225,7 +229,6 @@ export default function Landing() {
 
       </div>
 
-      {/* Footer Admin Link */}
       <div className="absolute bottom-2 right-4 z-20">
         <Link href="/admin" className="text-[10px] text-slate-700 hover:text-amber-600 transition uppercase tracking-widest font-bold">🔒 Admin</Link>
       </div>
