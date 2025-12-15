@@ -1,0 +1,100 @@
+"use client";
+import React from 'react';
+
+// Define the shape of our match data
+interface MatchProps {
+  match: any;
+  showScore?: boolean; // Option to show score (for Archive)
+}
+
+// 🧠 MEMOIZED COMPONENT
+// This wrapper prevents the Iframe from reloading unless data explicitly changes
+const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
+  
+  // Helper to extract Game ID
+  const getGameId = (url: string) => {
+    const match = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
+    return match ? match[1] : null;
+  };
+
+  const gameId = match.lichess_url ? getGameId(match.lichess_url) : null;
+
+  return (
+    <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full">
+      
+      {/* HEADER */}
+      <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700">
+        {/* White */}
+        <div className={`flex flex-col min-w-0 flex-1 ${match.result === '1 - 0' ? 'text-green-400' : 'text-slate-200'}`}>
+            <span className="font-bold text-sm md:text-base truncate">
+              {match.white_display_name || match.white_name}
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono truncate">@{match.white_name}</span>
+        </div>
+
+        {/* Center Badge */}
+        <div className="px-3 text-center">
+           {showScore && match.result ? (
+             <div className="text-lg font-bold font-mono text-amber-500 bg-slate-950 px-2 rounded border border-slate-800">
+               {match.result}
+             </div>
+           ) : (
+             <div className="bg-slate-950 px-2 py-1 rounded text-[10px] text-slate-500 border border-slate-800 font-bold">VS</div>
+           )}
+        </div>
+
+        {/* Black */}
+        <div className={`flex flex-col items-end min-w-0 flex-1 text-right ${match.result === '0 - 1' ? 'text-green-400' : 'text-slate-200'}`}>
+            <span className="font-bold text-sm md:text-base truncate">
+              {match.black_display_name || match.black_name}
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono truncate">@{match.black_name}</span>
+        </div>
+      </div>
+
+      {/* BOARD AREA (The Protected Zone) */}
+      <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950">
+        {gameId ? (
+          <iframe 
+            src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark`}
+            className="absolute inset-0 w-full h-full"
+            frameBorder="0"
+            allowFullScreen
+          ></iframe>
+        ) : (
+          /* Scheduled Placeholder */
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
+             <span className="text-4xl mb-2">📅</span>
+             <div className="text-sm font-bold text-amber-500">
+                {new Date(match.start_time).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}
+             </div>
+          </div>
+        )}
+      </div>
+
+      {/* FOOTER */}
+      {match.lichess_url && (
+        <a 
+          href={match.lichess_url} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="bg-slate-900 text-center py-2 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-slate-800 transition uppercase tracking-widest border-t border-slate-700 block"
+        >
+          Open in Lichess ↗
+        </a>
+      )}
+    </div>
+  );
+}, (prev, next) => {
+  // 🛡️ CUSTOM COMPARISON: Only re-render if these specific fields change
+  return (
+    prev.match.id === next.match.id &&
+    prev.match.lichess_url === next.match.lichess_url &&
+    prev.match.white_display_name === next.match.white_display_name &&
+    prev.match.black_display_name === next.match.black_display_name &&
+    prev.match.result === next.match.result &&
+    prev.match.start_time === next.match.start_time
+  );
+});
+
+export default MatchCard;
