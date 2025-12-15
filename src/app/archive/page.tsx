@@ -24,7 +24,7 @@ export default function Archive() {
 
   // Filter matches based on the selected tab
   const filteredMatches = matches.filter(m => 
-    (m.category || 'Adults') === activeTab // Default to Adults if category is missing
+    (m.category || 'Adults') === activeTab 
   );
 
   return (
@@ -74,9 +74,9 @@ export default function Archive() {
         {/* MATCH GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {filteredMatches.map((match) => (
-            <div key={match.id} className="bg-slate-800/50 grayscale hover:grayscale-0 transition duration-500 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col group">
+            <div key={match.id} className="bg-slate-800/50 transition duration-500 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col group">
               
-              <div className="bg-slate-900/50 p-3 md:p-4 flex justify-between items-center border-b border-slate-700 group-hover:bg-slate-900 transition">
+              <div className="bg-slate-900/50 p-3 md:p-4 flex justify-between items-center border-b border-slate-700">
                 {/* White */}
                 <div className={`flex flex-col min-w-0 flex-1 ${match.result === '1 - 0' ? 'text-green-400' : 'text-slate-300'}`}>
                     <span className="font-bold text-base md:text-lg leading-tight truncate">
@@ -105,17 +105,17 @@ export default function Archive() {
                 </div>
               </div>
 
-              {/* Lichess Embed */}
-              <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] opacity-80 group-hover:opacity-100 transition">
+              {/* Lichess Embed - NOW INTERACTIVE */}
+              <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3]">
                 <iframe 
                   src={`https://lichess.org/embed/${match.lichess_url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/)?.[1]}?theme=auto&bg=dark`}
                   className="absolute inset-0 w-full h-full"
                   frameBorder="0"
-                  style={{ pointerEvents: 'none' }}
+                  // Removed style={{ pointerEvents: 'none' }} to allow clicking
                 ></iframe>
               </div>
               
-              <a href={match.lichess_url} target="_blank" className="bg-slate-900 text-center py-2 text-xs font-bold text-slate-500 hover:text-amber-500 hover:bg-slate-950 transition uppercase tracking-widest">
+              <a href={match.lichess_url} target="_blank" className="bg-slate-900 text-center py-2 text-xs font-bold text-slate-500 hover:text-amber-500 hover:bg-slate-950 transition uppercase tracking-widest border-t border-slate-800">
                 Analyze on Lichess ↗
               </a>
             </div>
