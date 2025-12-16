@@ -117,6 +117,13 @@ export default function Admin() {
     return false; 
   };
 
+  // 📋 HELPER: GET MATCH DETAILS FOR LOGGING
+  const getMatchDetails = (id: string) => {
+    const m = matches.find(m => m.id === id);
+    if (!m) return `ID: ${id}`;
+    return `${m.white_display_name} vs ${m.black_display_name} [${m.lichess_url || 'No Link'}]`;
+  };
+
   // --- 🤖 SYNC FROM SHEETS ---
   const handleSheetSync = async () => {
     setSyncStatus('Fetching sheets...');
@@ -187,7 +194,7 @@ export default function Admin() {
         managed_by: session.user.email
     }]);
     if (!error) { 
-        logAction(session.user.email, 'CREATE_LIVE', `Created live match: ${liveWhite} vs ${liveBlack}`);
+        logAction(session.user.email, 'CREATE_LIVE', `Created: ${liveWhite || liveWhiteId} vs ${liveBlack || liveBlackId} [${liveLink}]`);
         setLiveLink(''); setLiveWhite(''); setLiveBlack(''); setLiveWhiteId(''); setLiveBlackId(''); fetchAllMatches(); 
     }
   };
@@ -201,7 +208,7 @@ export default function Admin() {
         managed_by: session.user.email
     }]);
     if (!error) { 
-        logAction(session.user.email, 'SCHEDULE', `Scheduled match: ${schedWhite} vs ${schedBlack}`);
+        logAction(session.user.email, 'SCHEDULE', `Scheduled: ${schedWhite} vs ${schedBlack} at ${schedTime}`);
         setSchedTime(''); setSchedWhite(''); setSchedBlack(''); setSchedWhiteId(''); setSchedBlackId(''); fetchAllMatches(); 
     }
   };
@@ -215,7 +222,7 @@ export default function Admin() {
         managed_by: session.user.email
     }).eq('id', editingId);
     if (!error) { 
-        logAction(session.user.email, 'UPDATE', `Updated match details for ID: ${editingId}`);
+        logAction(session.user.email, 'UPDATE', `Updated: ${editWhite} vs ${editBlack} [${editLink}]`);
         setEditingId(null); fetchAllMatches(); 
     }
   };
@@ -240,36 +247,39 @@ export default function Admin() {
         managed_by: session.user.email 
     }).eq('id', match.id);
     
-    logAction(session.user.email, 'PROMOTE', `Promoted scheduled match to LIVE: ${match.white_display_name} vs ${match.black_display_name}`);
+    logAction(session.user.email, 'PROMOTE', `Promoted to LIVE: ${match.white_display_name} vs ${match.black_display_name} [${url}]`);
     fetchAllMatches();
   };
 
   const recordResult = async (id: string, result: string) => {
     if(!confirm(`End match: ${result}?`)) return;
+    const details = getMatchDetails(id);
     await supabase.from('live_matches').update({ 
         result: result, is_active: false,
         managed_by: session.user.email 
     }).eq('id', id);
     
-    logAction(session.user.email, 'RESULT', `Recorded result ${result} for match ID: ${id}`);
+    logAction(session.user.email, 'RESULT', `Result ${result}: ${details}`);
     fetchAllMatches();
   };
 
   const toggleStatus = async (id: string, currentStatus: boolean) => {
+    const details = getMatchDetails(id);
     await supabase.from('live_matches').update({ 
         is_active: !currentStatus,
         managed_by: session.user.email 
     }).eq('id', id);
     
-    logAction(session.user.email, 'STATUS_CHANGE', `Changed active status to ${!currentStatus} for match ID: ${id}`);
+    logAction(session.user.email, 'STATUS_CHANGE', `${!currentStatus ? 'Activated' : 'Archived'}: ${details}`);
     fetchAllMatches();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete?")) return;
+    const details = getMatchDetails(id);
     await supabase.from('live_matches').delete().eq('id', id);
     
-    logAction(session.user.email, 'DELETE', `Deleted match ID: ${id}`);
+    logAction(session.user.email, 'DELETE', `Deleted: ${details}`);
     if(editingId === id) setEditingId(null);
     fetchAllMatches();
   };
