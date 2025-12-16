@@ -14,7 +14,7 @@ const LichessBoard = React.memo(
   ({ gameId }: { gameId: string }) => {
     return (
       <iframe
-        src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark`}
+        src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark&autoplay=1&clock=1`}
         className="absolute inset-0 w-full h-full"
         frameBorder="0"
         allow="autoplay; fullscreen"
