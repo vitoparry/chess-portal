@@ -5,6 +5,7 @@ import MatchCard from '../../components/MatchCard';
 
 export default function Live() {
   const [matches, setMatches] = useState<any[]>([]);
+  // Use a ref to store the stringified data for comparison without triggering renders
   const lastDataStr = useRef('');
 
   useEffect(() => {
@@ -24,10 +25,11 @@ export default function Live() {
         .select('*')
         .or(`is_active.eq.true,start_time.gte.${todayISO},created_at.gte.${todayISO}`)
         .order('is_active', { ascending: false }) // Live first
-        .order('start_time', { ascending: true }); // Then by time
+        .order('start_time', { ascending: false }); // Newest matches at the top!
       
       const newDataStr = JSON.stringify(data);
       
+      // Only update state if data is genuinely different
       if (data && newDataStr !== lastDataStr.current) {
           lastDataStr.current = newDataStr;
           setMatches(data);
@@ -51,6 +53,8 @@ export default function Live() {
 
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+      
+      {/* PAGE HEADER */}
       <header className="bg-slate-950 border-b border-slate-800 p-6 shadow-lg sticky top-0 z-50">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
@@ -113,7 +117,8 @@ export default function Live() {
         {/* EMPTY STATE */}
         {matches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 opacity-50">
-            <h2 className="text-xl">No matches scheduled for today.</h2>
+            <h2 className="text-xl">No matches active or recent.</h2>
+            <p className="text-slate-500 mt-2">Check back later for live games!</p>
           </div>
         )}
 
