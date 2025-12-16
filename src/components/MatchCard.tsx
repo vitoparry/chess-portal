@@ -9,19 +9,25 @@ interface MatchProps {
 // 🧱 ISOLATED BOARD COMPONENT
 // This component ONLY re-renders if the gameId changes.
 // Live moves are handled internally by Lichess via autoplay=1.
+//chatgpt code added below
 const LichessBoard = React.memo(
   ({ gameId }: { gameId: string }) => {
     return (
       <iframe
         src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark&autoplay=1&clock=1`}
-        className="absolute inset-0 w-full h-full z-10"
+        className="absolute inset-0 w-full h-full"
         frameBorder="0"
+        allow="autoplay; fullscreen"
         allowFullScreen
+        style={{
+          pointerEvents: 'auto',
+        }}
       />
     );
   },
   (prev, next) => prev.gameId === next.gameId
 );
+
 
 // 🧠 MAIN CARD COMPONENT
 const MatchCard = ({ match, showScore }: MatchProps) => {
@@ -74,7 +80,7 @@ const MatchCard = ({ match, showScore }: MatchProps) => {
       </div>
 
       {/* BOARD AREA */}
-      <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950 z-0">
+      <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950 overflow-hidden">
         {gameId ? (
           <LichessBoard gameId={gameId} />
         ) : (
