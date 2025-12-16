@@ -6,18 +6,19 @@ interface MatchProps {
   showScore?: boolean;
 }
 
-// 🧠 MEMOIZED COMPONENT: This stops the flickering/scrolling issues
+// 🧠 MEMOIZED COMPONENT: Prevents iframe reloading and scroll jumping
 const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
   
   const getGameId = (url: string) => {
-    const match = url?.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
-    return match ? match[1] : null;
+    // Robust ID extraction (handles /white, /black, /analysis etc.)
+    const idMatch = url?.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
+    return idMatch ? idMatch[1] : null;
   };
 
   const gameId = match.lichess_url ? getGameId(match.lichess_url) : null;
 
   return (
-    <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full transition duration-300 hover:shadow-2xl hover:border-slate-600">
+    <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full hover:border-slate-600 transition-colors">
       
       {/* HEADER */}
       <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700">
@@ -30,10 +31,10 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
             <span className="text-[10px] text-slate-500 font-mono truncate">@{match.white_name}</span>
         </div>
 
-        {/* Center Badge (VS or Score) */}
+        {/* Center Badge */}
         <div className="px-2 text-center min-w-[60px]">
            {showScore && match.result ? (
-             <div className="text-sm md:text-base font-black font-mono text-amber-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+             <div className="text-sm font-black font-mono text-amber-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">
                {match.result}
              </div>
            ) : (
@@ -50,18 +51,18 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
         </div>
       </div>
 
-      {/* BOARD AREA */}
-      <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950">
+      {/* BOARD AREA - Explicitly interactive */}
+      <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950 z-0">
         {gameId ? (
           <iframe 
             src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark`}
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 w-full h-full z-10"
             frameBorder="0"
             allowFullScreen
+            style={{ pointerEvents: 'auto' }} // 👈 FIX: Forces clicks to pass through to Lichess
           ></iframe>
         ) : (
-          /* Placeholder for Scheduled Matches */
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10">
              <span className="text-4xl mb-2">📅</span>
              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Scheduled</div>
              <div className="text-sm font-bold text-amber-500 mt-1">
@@ -71,13 +72,13 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
         )}
       </div>
 
-      {/* FOOTER LINK */}
+      {/* FOOTER */}
       {match.lichess_url && (
         <a 
           href={match.lichess_url} 
           target="_blank" 
           rel="noopener noreferrer"
-          className="bg-slate-900 text-center py-2 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-slate-800 transition uppercase tracking-widest border-t border-slate-700 block"
+          className="bg-slate-900/80 text-center py-2 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-slate-800 transition uppercase tracking-widest border-t border-slate-700 block z-20"
         >
           Open in Lichess ↗
         </a>
@@ -85,7 +86,7 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
     </div>
   );
 }, (prev, next) => {
-  // 🛡️ RE-RENDER GUARD: Only update if these specific values change
+  // 🛡️ Strict Re-render Guard
   return (
     prev.match.id === next.match.id &&
     prev.match.lichess_url === next.match.lichess_url &&
