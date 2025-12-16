@@ -10,7 +10,7 @@ export default function NavBar() {
 
   const links = [
     { href: '/', label: 'Home' },
-    { href: '/live', label: 'Live' },
+    { href: '/live', label: "Today's Matches" },
     { href: '/standings', label: 'Standings' },
     { href: '/groups', label: 'Rounds' },
     { href: '/rules', label: 'Rules' },

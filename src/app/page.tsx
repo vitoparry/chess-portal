@@ -35,7 +35,7 @@ export default function Landing() {
   const [leaders, setLeaders] = useState<any>({});
   const [loadingStats, setLoadingStats] = useState(true);
 
-  // 1. Fetch Live Matches
+  // 1. Fetch Live Matches (Always Fresh)
   useEffect(() => {
     const fetchMatches = async () => {
       let { data } = await supabase
@@ -125,10 +125,10 @@ export default function Landing() {
              }
              return { name, points };
           })
-          // Filter: Must have a name and > 0 points
+          // 🔧 FILTER: Remove 0 point players
           .filter(p => p.name !== 'Unknown' && p.name !== '' && p.points > 0);
 
-          // Sort Highest to Lowest
+          // Sort Descending
           players.sort((a, b) => b.points - a.points);
 
           // Get Top 3 Scores (handling ties)
@@ -219,7 +219,7 @@ export default function Landing() {
             <div className="flex flex-col gap-4">
                 <Link href="/live" className="group w-full">
                     <button className="w-full py-5 bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 rounded-2xl font-black text-2xl shadow-[0_0_20px_rgba(220,38,38,0.2)] transition transform group-hover:-translate-y-1 flex items-center justify-center gap-2 border border-red-500/30">
-                    <span className="animate-pulse">🔴</span> LIVE MATCHES
+                    <span className="animate-pulse">🔴</span> TODAY'S MATCHES
                     </button>
                 </Link>
                 
