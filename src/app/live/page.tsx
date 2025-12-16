@@ -10,14 +10,14 @@ export default function Live() {
   useEffect(() => {
     const fetchMatches = async () => {
       // 1. Calculate 24 Hours Ago (Rolling Window)
-      // This ensures matches created yesterday but finished today don't vanish
+      // This ensures matches created yesterday but finished today don't vanish immediately
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
       const lookbackISO = yesterday.toISOString();
 
       // 2. Fetch matches:
       //    a) Active matches (Always show)
-      //    b) OR Matches started/created in the last 24 hours
+      //    b) OR Matches updated/created in the last 24 hours (Show in Concluded)
       let { data } = await supabase
         .from('live_matches')
         .select('*')
@@ -38,14 +38,16 @@ export default function Live() {
     return () => clearInterval(interval);
   }, []);
 
-  // Filter into two buckets
+  // Filter Logic:
+  // Live = Active AND No Result yet.
   const liveMatches = matches
-    .filter(m => m.is_active)
+    .filter(m => m.is_active && !m.result)
     // Extra safety sort: Newest live match on top
     .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime());
 
+  // Concluded = Not Active OR Has a Result
   const concludedMatches = matches
-    .filter(m => !m.is_active)
+    .filter(m => !m.is_active || m.result)
     .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime());
 
   // Helper for formatting time
@@ -75,7 +77,7 @@ export default function Live() {
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {liveMatches.map((match) => (
                 <div key={match.id} className="flex flex-col gap-2">
-                   {/* Ensure key is on the wrapper to help React diffing */}
+                   {/* Key is on the wrapper to help React diffing */}
                    <MatchCard match={match} />
                    <div className="flex justify-between px-2 text-xs text-slate-500 font-mono">
                       <span>Started: {formatTime(match.start_time || match.created_at)}</span>
@@ -96,10 +98,8 @@ export default function Live() {
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {concludedMatches.map((match) => (
                 <div key={match.id} className="flex flex-col gap-2 opacity-90 hover:opacity-100 transition">
-                   {/* Pass showScore to see the result immediately */}
                    <MatchCard match={match} showScore={true} />
                    
-                   {/* Timestamp Footer */}
                    <div className="flex justify-between px-2 text-xs text-slate-500 font-mono bg-slate-800/50 p-2 rounded-lg border border-slate-800">
                       <div>
                         <span className="text-slate-600 mr-2">Start:</span>
@@ -107,7 +107,7 @@ export default function Live() {
                       </div>
                       <div>
                         <span className="text-slate-600 mr-2">Result:</span>
-                        <span className="text-amber-500 font-bold">{match.result}</span>
+                        <span className="text-amber-500 font-bold">{match.result || 'Ended'}</span>
                       </div>
                    </div>
                 </div>

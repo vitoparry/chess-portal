@@ -11,7 +11,8 @@ interface MatchProps {
 const LichessBoard = React.memo(({ gameId }: { gameId: string }) => {
   return (
     <iframe 
-      // 🚀 FIX: Added autoplay=1 so moves happen automatically!
+      // 🚀 CRITICAL FIX: autoplay=1 forces the game to play live moves!
+      // clock=1 shows the timer, which is great for live viewing
       src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark&autoplay=1&clock=1`}
       className="absolute inset-0 w-full h-full z-10"
       frameBorder="0"
@@ -97,8 +98,8 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   );
 };
 
-// 🛡️ RE-RENDER GUARD: Only update if these specific values change
-const MatchCard = React.memo(MatchCardComponent, (prev, next) => {
+// 🛡️ RE-RENDER GUARD: Ensure the whole card is memoized correctly
+export default React.memo(MatchCardComponent, (prev, next) => {
     return (
         prev.match.id === next.match.id &&
         prev.match.lichess_url === next.match.lichess_url &&
@@ -108,5 +109,3 @@ const MatchCard = React.memo(MatchCardComponent, (prev, next) => {
         prev.match.start_time === next.match.start_time
     );
 });
-
-export default MatchCard;
