@@ -75,6 +75,7 @@ export default function Live() {
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {liveMatches.map((match) => (
                 <div key={match.id} className="flex flex-col gap-2">
+                   {/* Ensure key is on the wrapper to help React diffing */}
                    <MatchCard match={match} />
                    <div className="flex justify-between px-2 text-xs text-slate-500 font-mono">
                       <span>Started: {formatTime(match.start_time || match.created_at)}</span>
