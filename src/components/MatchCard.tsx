@@ -7,16 +7,16 @@ interface MatchProps {
 }
 
 // 🧱 ISOLATED BOARD COMPONENT
-// This specific component is "Stubborn". It will ONLY re-render if the gameId changes.
-// It ignores all other updates (like score changes, timestamps, etc.), keeping the connection alive.
+// This component must be defined OUTSIDE the main component so it doesn't get redefined on every render.
 const LichessBoard = React.memo(({ gameId }: { gameId: string }) => {
   return (
     <iframe 
       src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark`}
-      className="absolute inset-0 w-full h-full z-10"
+      className="absolute inset-0 w-full h-full"
       frameBorder="0"
       allowFullScreen
-      style={{ pointerEvents: 'auto' }} // Ensures clicks work for analysis/next move
+      // This ensures the iframe receives pointer events (clicks)
+      style={{ pointerEvents: 'auto' }} 
     ></iframe>
   );
 }, (prev, next) => prev.gameId === next.gameId);
@@ -33,11 +33,10 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   const gameId = match.lichess_url ? getGameId(match.lichess_url) : null;
 
   return (
-    <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full hover:border-slate-600 transition-colors">
+    <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full hover:border-slate-600 transition-colors relative">
       
-      {/* HEADER (Can update freely without killing the board) */}
-      <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700">
-        
+      {/* HEADER */}
+      <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700 z-20 relative">
         {/* White Player */}
         <div className={`flex flex-col min-w-0 flex-1 ${match.result && match.result.startsWith('1') ? 'text-green-400' : 'text-slate-200'}`}>
             <span className="font-bold text-sm md:text-base truncate">
@@ -67,12 +66,11 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
       </div>
 
       {/* BOARD AREA */}
-      <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950 z-0">
+      <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950 z-10">
         {gameId ? (
-          // Usage of the Isolated Component
           <LichessBoard gameId={gameId} />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
              <span className="text-4xl mb-2">📅</span>
              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Scheduled</div>
              <div className="text-sm font-bold text-amber-500 mt-1">
@@ -88,7 +86,7 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
           href={match.lichess_url} 
           target="_blank" 
           rel="noopener noreferrer"
-          className="bg-slate-900/80 text-center py-2 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-slate-800 transition uppercase tracking-widest border-t border-slate-700 block z-20"
+          className="bg-slate-900/80 text-center py-2 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-slate-800 transition uppercase tracking-widest border-t border-slate-700 block z-20 relative"
         >
           Open in Lichess ↗
         </a>
@@ -97,7 +95,8 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   );
 };
 
-// 🛡️ RE-RENDER GUARD: Only update if these specific values change
+// 🛡️ RE-RENDER GUARD: This is what was missing/broken in your file
+// We verify that none of the data has changed. If it's the same, we DO NOT re-render.
 const MatchCard = React.memo(MatchCardComponent, (prev, next) => {
     return (
         prev.match.id === next.match.id &&

@@ -10,23 +10,23 @@ export default function Live() {
   useEffect(() => {
     const fetchMatches = async () => {
       // 1. Calculate 24 Hours Ago (Rolling Window)
+      // This ensures matches created yesterday but finished today don't vanish
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
       const lookbackISO = yesterday.toISOString();
 
       // 2. Fetch matches:
       //    a) Active matches (Always show)
-      //    b) OR Matches updated/created in the last 24 hours
+      //    b) OR Matches started/created in the last 24 hours
       let { data } = await supabase
         .from('live_matches')
         .select('*')
         .or(`is_active.eq.true,created_at.gte.${lookbackISO},start_time.gte.${lookbackISO}`)
-        .order('is_active', { ascending: false }) 
-        .order('start_time', { ascending: false }); 
+        .order('is_active', { ascending: false }) // Live first
+        .order('start_time', { ascending: false }); // Newest matches at the top (Descending)
       
       const newDataStr = JSON.stringify(data);
       
-      // Prevent unnecessary re-renders if data hasn't changed
       if (data && newDataStr !== lastDataStr.current) {
           lastDataStr.current = newDataStr;
           setMatches(data);
@@ -38,14 +38,15 @@ export default function Live() {
     return () => clearInterval(interval);
   }, []);
 
-  // Filter and Sort in Memory to be 100% sure of order
+  // Filter into two buckets
   const liveMatches = matches
     .filter(m => m.is_active)
-    .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime()); // Newest first
+    // Extra safety sort: Newest live match on top
+    .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime());
 
   const concludedMatches = matches
     .filter(m => !m.is_active)
-    .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime()); // Newest first
+    .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime());
 
   // Helper for formatting time
   const formatTime = (isoString: string) => {
@@ -74,7 +75,6 @@ export default function Live() {
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {liveMatches.map((match) => (
                 <div key={match.id} className="flex flex-col gap-2">
-                   {/* Ensure key is on the wrapper to help React diffing */}
                    <MatchCard match={match} />
                    <div className="flex justify-between px-2 text-xs text-slate-500 font-mono">
                       <span>Started: {formatTime(match.start_time || match.created_at)}</span>
@@ -95,8 +95,10 @@ export default function Live() {
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {concludedMatches.map((match) => (
                 <div key={match.id} className="flex flex-col gap-2 opacity-90 hover:opacity-100 transition">
+                   {/* Pass showScore to see the result immediately */}
                    <MatchCard match={match} showScore={true} />
                    
+                   {/* Timestamp Footer */}
                    <div className="flex justify-between px-2 text-xs text-slate-500 font-mono bg-slate-800/50 p-2 rounded-lg border border-slate-800">
                       <div>
                         <span className="text-slate-600 mr-2">Start:</span>
