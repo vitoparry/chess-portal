@@ -9,14 +9,16 @@ export default function Live() {
 
   useEffect(() => {
     const fetchMatches = async () => {
-      // 1. Calculate Today's Midnight (Local Time)
+      // 1. Calculate Midnight Today (Local Time)
+      // Any match created/started AFTER this time is considered "Today's Match"
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayISO = today.toISOString();
 
-      // 2. Fetch matches that are either:
-      //    a) Currently Active (is_active = true)
-      //    b) OR Finished but started/created Today (start_time >= today)
+      // 2. Fetch matches:
+      //    a) Currently Active (is_active = true) -> Always show these
+      //    b) OR Matches started/created Today (start_time >= today) -> Show these even if ended
+      //    c) Fallback: created_at >= today (in case start_time wasn't set)
       let { data } = await supabase
         .from('live_matches')
         .select('*')
@@ -97,10 +99,9 @@ export default function Live() {
                         <span className="text-slate-600 mr-2">Start:</span>
                         {formatTime(match.start_time || match.created_at)}
                       </div>
-                      {/* Note: We use updated_at as a proxy for 'End Time' if available, or just show 'Final' */}
                       <div>
-                        <span className="text-slate-600 mr-2">End:</span>
-                        {match.updated_at ? formatTime(match.updated_at) : 'Final'}
+                        <span className="text-slate-600 mr-2">Result:</span>
+                        <span className="text-amber-500 font-bold">{match.result}</span>
                       </div>
                    </div>
                 </div>

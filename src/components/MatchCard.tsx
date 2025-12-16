@@ -6,11 +6,26 @@ interface MatchProps {
   showScore?: boolean;
 }
 
-// 🧠 MEMOIZED COMPONENT: Prevents iframe reloading and scroll jumping
-const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
+// 🧱 ISOLATED BOARD COMPONENT
+// This specific component is "Stubborn". It will ONLY re-render if the gameId changes.
+// It ignores all other updates (like score changes, timestamps, etc.), keeping the connection alive.
+const LichessBoard = React.memo(({ gameId }: { gameId: string }) => {
+  return (
+    <iframe 
+      src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark`}
+      className="absolute inset-0 w-full h-full z-10"
+      frameBorder="0"
+      allowFullScreen
+      style={{ pointerEvents: 'auto' }} // Ensures clicks work for analysis/next move
+    ></iframe>
+  );
+}, (prev, next) => prev.gameId === next.gameId);
+
+
+// 🧠 MAIN CARD COMPONENT
+const MatchCard = ({ match, showScore }: MatchProps) => {
   
   const getGameId = (url: string) => {
-    // Robust ID extraction (handles /white, /black, /analysis etc.)
     const idMatch = url?.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
     return idMatch ? idMatch[1] : null;
   };
@@ -20,7 +35,7 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
   return (
     <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full hover:border-slate-600 transition-colors">
       
-      {/* HEADER */}
+      {/* HEADER (Can update freely without killing the board) */}
       <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700">
         
         {/* White Player */}
@@ -51,22 +66,17 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
         </div>
       </div>
 
-      {/* BOARD AREA - Explicitly interactive */}
+      {/* BOARD AREA */}
       <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950 z-0">
         {gameId ? (
-          <iframe 
-            src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark`}
-            className="absolute inset-0 w-full h-full z-10"
-            frameBorder="0"
-            allowFullScreen
-            style={{ pointerEvents: 'auto' }} // 👈 FIX: Forces clicks to pass through to Lichess
-          ></iframe>
+          // Usage of the Isolated Component
+          <LichessBoard gameId={gameId} />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10">
              <span className="text-4xl mb-2">📅</span>
              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Scheduled</div>
              <div className="text-sm font-bold text-amber-500 mt-1">
-                {new Date(match.start_time).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}
+                {match.start_time ? new Date(match.start_time).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : 'Time TBD'}
              </div>
           </div>
         )}
@@ -85,16 +95,6 @@ const MatchCard = React.memo(({ match, showScore }: MatchProps) => {
       )}
     </div>
   );
-}, (prev, next) => {
-  // 🛡️ Strict Re-render Guard
-  return (
-    prev.match.id === next.match.id &&
-    prev.match.lichess_url === next.match.lichess_url &&
-    prev.match.white_display_name === next.match.white_display_name &&
-    prev.match.black_display_name === next.match.black_display_name &&
-    prev.match.result === next.match.result &&
-    prev.match.start_time === next.match.start_time
-  );
-});
+};
 
 export default MatchCard;
