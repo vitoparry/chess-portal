@@ -9,15 +9,14 @@ export default function Live() {
 
   useEffect(() => {
     const fetchMatches = async () => {
-      // 1. Calculate 24 Hours Ago (Rolling Window) to catch recent games
+      // 1. Calculate 24 Hours Ago (Rolling Window)
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
       const lookbackISO = yesterday.toISOString();
 
       // 2. Fetch matches:
       //    a) Active matches (Always show)
-      //    b) Matches updated/created in the last 24 hours
-      //    We order by is_active first (true on top), then by start_time (newest on top)
+      //    b) OR Matches updated/created in the last 24 hours
       let { data } = await supabase
         .from('live_matches')
         .select('*')

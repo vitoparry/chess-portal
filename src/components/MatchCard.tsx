@@ -8,6 +8,7 @@ interface MatchProps {
 
 // 🧱 ISOLATED BOARD COMPONENT
 // This specific component is "Stubborn". It will ONLY re-render if the gameId changes.
+// It ignores all other updates (like score changes, timestamps, etc.), keeping the connection alive.
 const LichessBoard = React.memo(({ gameId }: { gameId: string }) => {
   return (
     <iframe 
@@ -15,12 +16,13 @@ const LichessBoard = React.memo(({ gameId }: { gameId: string }) => {
       className="absolute inset-0 w-full h-full z-10"
       frameBorder="0"
       allowFullScreen
-      style={{ pointerEvents: 'auto' }} // Explicitly allow interaction
+      style={{ pointerEvents: 'auto' }} // Ensures clicks work for analysis/next move
     ></iframe>
   );
 }, (prev, next) => prev.gameId === next.gameId);
 
 
+// 🧠 MAIN CARD COMPONENT
 const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   
   const getGameId = (url: string) => {
@@ -33,7 +35,7 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   return (
     <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full hover:border-slate-600 transition-colors">
       
-      {/* HEADER: Updateable Info */}
+      {/* HEADER (Can update freely without killing the board) */}
       <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700">
         
         {/* White Player */}
@@ -95,8 +97,7 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   );
 };
 
-// 🛡️ RE-RENDER GUARD
-// We compare previous props to next props. If return is true, NO re-render.
+// 🛡️ RE-RENDER GUARD: Only update if these specific values change
 const MatchCard = React.memo(MatchCardComponent, (prev, next) => {
     return (
         prev.match.id === next.match.id &&
