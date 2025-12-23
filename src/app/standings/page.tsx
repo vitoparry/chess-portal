@@ -79,8 +79,6 @@ export default function Standings() {
     const getId = (p: any) => {
         let val = p['Tournament ID'] || p['ID'] || p['Code'];
         if (val) return val.toString().toUpperCase();
-        
-        // Fuzzy search
         for (const key in p) {
             if (key.toLowerCase().includes('tournament') || key.toLowerCase().includes('id')) {
                  return p[key]?.toString().toUpperCase() || '';
@@ -93,7 +91,7 @@ export default function Standings() {
     const getName = (p: any) => p['Nickname'] || p['Player Name'] || p['Name'] || 'Unknown';
 
     if (category === 'Adults') {
-      // Filter by ID prefix using the robust ID finder
+      // Filter by ID prefix (Robust check)
       const groupA = rows.filter((p: any) => getId(p).includes('GAP'));
       const groupB = rows.filter((p: any) => getId(p).includes('GBP'));
       
@@ -212,7 +210,8 @@ export default function Standings() {
                              
                              <div className="flex items-center justify-center gap-6 text-xs">
                                  {/* Semis Column */}
-                                 <div className="flex flex-col gap-12 w-40">
+                                 <div className="flex flex-col gap-12 w-full max-w-[180px]">
+                                     {/* SF 1 */}
                                      <div className="relative bg-slate-900 p-3 rounded-lg border border-slate-600 shadow-lg">
                                          <div className="text-slate-500 mb-1 uppercase tracking-wider text-[10px]">Semi-Final 1</div>
                                          <div className="font-bold text-green-400 border-b border-slate-800 pb-1 mb-1">{data.groups[0]?.players[0]?.['Nickname'] || 'A1 (TBD)'}</div>
