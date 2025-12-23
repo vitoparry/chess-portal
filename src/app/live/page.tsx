@@ -1,267 +1,128 @@
 "use client";
-import { useEffect, useState } from 'react';
-import Papa from 'papaparse';
+import { useEffect, useState, useRef } from 'react';
+import { supabase } from '../../utils/supabaseClient';
+import MatchCard from '../../components/MatchCard';
 
-// 📊 CONFIG: DATA SOURCES
-const DATA_SOURCES = [
-  { 
-    category: 'Adults', 
-    standings: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6UFPFARgN12MiEuYpGG2WWAGe0SPlORnm1jeSgoFiXZY7ia4sFXMXAVXalIVn1X8cCK8kFAQ__44k/pub?gid=535970026&single=true&output=csv',
-    rounds: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6UFPFARgN12MiEuYpGG2WWAGe0SPlORnm1jeSgoFiXZY7ia4sFXMXAVXalIVn1X8cCK8kFAQ__44k/pub?gid=1586830246&single=true&output=csv'
-  },
-  { 
-    category: 'Juniors', 
-    standings: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSugPx6ejmoqQGvkXMVZ2IC-5NKuKFuhrBkEFjSRr-lZbY1aQIfW0tQXllF6cSGNIHL7TXgklGosGZ6/pub?gid=45823858&single=true&output=csv',
-    rounds: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSugPx6ejmoqQGvkXMVZ2IC-5NKuKFuhrBkEFjSRr-lZbY1aQIfW0tQXllF6cSGNIHL7TXgklGosGZ6/pub?gid=1273587789&single=true&output=csv'
-  },
-  { 
-    category: 'Kids', 
-    standings: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSOj-HR4exbW-YvxAjDSe_l83xGXNbty52DoFhJQQqk7U97KVtKnh9F2QcG1Dn9z3hK9C6eGKqJA9ln/pub?gid=130837965&single=true&output=csv',
-    rounds: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSOj-HR4exbW-YvxAjDSe_l83xGXNbty52DoFhJQQqk7U97KVtKnh9F2QcG1Dn9z3hK9C6eGKqJA9ln/pub?gid=756584123&single=true&output=csv'
-  }
-];
-
-export default function Groups() {
-  const [activeTab, setActiveTab] = useState('Adults');
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any>(null); // Stores processed group data
+export default function Live() {
+  const [matches, setMatches] = useState<any[]>([]);
+  const lastDataStr = useRef('');
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const source = DATA_SOURCES.find(s => s.category === activeTab);
-      if (!source) return;
+    const fetchMatches = async () => {
+      // 1. Calculate 24 Hours Ago (Rolling Window)
+      // This ensures matches created yesterday but finished today don't vanish immediately
+      const yesterday = new Date();
+      yesterday.setHours(yesterday.getHours() - 24);
+      const lookbackISO = yesterday.toISOString();
 
-      try {
-        // Fetch Standings
-        const standingsRes = await fetch(source.standings);
-        const standingsText = await standingsRes.text();
-        const standingsParsed = Papa.parse(standingsText, { header: true, skipEmptyLines: true });
-
-        // Process Data based on Category
-        const processed = processCategoryData(activeTab, standingsParsed.data);
-        setData(processed);
-        
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
+      // 2. Fetch matches:
+      //    a) Active matches (Always show)
+      //    b) OR Matches updated/created in the last 24 hours (Show in Concluded)
+      let { data } = await supabase
+        .from('live_matches')
+        .select('*')
+        .or(`is_active.eq.true,created_at.gte.${lookbackISO},start_time.gte.${lookbackISO}`)
+        .order('is_active', { ascending: false }) // Live first
+        .order('start_time', { ascending: false }); // Newest matches at the top (Descending)
+      
+      const newDataStr = JSON.stringify(data);
+      
+      if (data && newDataStr !== lastDataStr.current) {
+          lastDataStr.current = newDataStr;
+          setMatches(data);
       }
     };
 
-    fetchData();
-  }, [activeTab]);
+    fetchMatches();
+    const interval = setInterval(fetchMatches, 5000); 
+    return () => clearInterval(interval);
+  }, []);
 
-  const processCategoryData = (category: string, standings: any[]) => {
-    // Helper to parse points
-    const getPoints = (p: any) => parseFloat(p['Points'] || p['Pts'] || p['Total'] || '0');
+  // Filter Logic:
+  // Live = Active AND No Result yet.
+  const liveMatches = matches
+    .filter(m => m.is_active && !m.result)
+    // Extra safety sort: Newest live match on top
+    .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime());
 
-    if (category === 'Adults') {
-      // Filter by ID prefix
-      const groupA = standings.filter((p: any) => p['Tournament ID']?.startsWith('GAP') || p['ID']?.startsWith('GAP'));
-      const groupB = standings.filter((p: any) => p['Tournament ID']?.startsWith('GBP') || p['ID']?.startsWith('GBP'));
-      
-      return {
-        groups: [
-          { name: 'Group A', players: groupA.sort((a: any, b: any) => getPoints(b) - getPoints(a)) },
-          { name: 'Group B', players: groupB.sort((a: any, b: any) => getPoints(b) - getPoints(a)) }
-        ]
-      };
-    } 
-    
-    else if (category === 'Juniors') {
-      // Needs logic for 3 groups. Assuming prefixes or grouping logic.
-      // IF prefixes aren't clear, we might need a specific 'Group' column in the CSV? 
-      // For now, I'll attempt a generic split or look for a Group column.
-      // FALLBACK: If no explicit ID logic, maybe split by row count or look for a "Group" header?
-      // Let's try finding unique ID prefixes if possible, or just dump them all if structure is unclear.
-      // IMPROVEMENT: Check if there is a 'Group' column in your CSV.
-      
-      // Attempting to split by ID prefix assuming standard naming
-      const groups: any = {};
-      standings.forEach((p: any) => {
-          const id = p['Tournament ID'] || p['ID'];
-          if(id) {
-              const prefix = id.replace(/[0-9]/g, ''); // Get letters e.g., 'GAP'
-              if(!groups[prefix]) groups[prefix] = [];
-              groups[prefix].push(p);
-          }
-      });
-      
-      // Convert to array
-      const groupArray = Object.keys(groups).map(key => ({
-          name: `Group ${key}`, 
-          players: groups[key].sort((a: any, b: any) => getPoints(b) - getPoints(a))
-      }));
+  // Concluded = Not Active OR Has a Result
+  const concludedMatches = matches
+    .filter(m => !m.is_active || m.result)
+    .sort((a, b) => new Date(b.start_time || b.created_at).getTime() - new Date(a.start_time || a.created_at).getTime());
 
-      return { groups: groupArray };
-    } 
-    
-    else if (category === 'Kids') {
-       // Single Group
-       const sorted = standings.sort((a: any, b: any) => getPoints(b) - getPoints(a));
-       return { 
-           groups: [{ name: 'League Table', players: sorted }] 
-       };
-    }
+  // Helper for formatting time
+  const formatTime = (isoString: string) => {
+    if (!isoString) return '';
+    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-          <h1 className="text-3xl font-bold text-blue-400">
-            ⚔️ Tournament Progress: {activeTab}
+    <main className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+      <header className="bg-slate-950 border-b border-slate-800 p-6 shadow-lg sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
+            📅 Today's Matches
           </h1>
-          <a href="/" className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-sm font-bold">
-            ← Home
-          </a>
         </div>
+      </header>
 
-        {/* TABS */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-slate-800 p-1 rounded-xl inline-flex shadow-lg border border-slate-700">
-            {['Adults', 'Juniors', 'Kids'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${
-                  activeTab === tab 
-                    ? 'bg-blue-600 text-white shadow-md transform scale-105' 
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* LOADING */}
-        {loading && (
-             <div className="flex flex-col items-center justify-center h-64 text-slate-500 animate-pulse">
-               <span className="text-2xl mb-2">📊</span>
-               Building Bracket...
-             </div>
+      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-12">
+        
+        {/* SECTION 1: LIVE NOW */}
+        {liveMatches.length > 0 && (
+          <section>
+             <h2 className="text-xl font-bold text-red-500 mb-4 flex items-center gap-2 animate-pulse">
+                <span>🔴</span> Live Now
+             </h2>
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {liveMatches.map((match) => (
+                <div key={match.id} className="flex flex-col gap-2">
+                   {/* Ensure key is on the wrapper to help React diffing */}
+                   <MatchCard match={match} />
+                   <div className="flex justify-between px-2 text-xs text-slate-500 font-mono">
+                      <span>Started: {formatTime(match.start_time || match.created_at)}</span>
+                      <span className="text-green-500">In Progress...</span>
+                   </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
-        {/* CONTENT */}
-        {!loading && data && (
-            <div className="space-y-12">
-                
-                {/* 1. GROUPS SECTION */}
-                <div className={`grid gap-8 ${data.groups.length > 2 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-                    {data.groups.map((group: any, idx: number) => (
-                        <div key={idx} className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800">
-                            <h2 className="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2 flex justify-between">
-                                <span>{group.name}</span>
-                                <span className="text-xs font-normal text-slate-500 bg-slate-950 px-2 py-1 rounded">Top 2 Qualify</span>
-                            </h2>
-                            <div className="space-y-2">
-                                {group.players.map((p: any, i: number) => (
-                                    <div key={i} className={`flex justify-between items-center p-2 rounded ${i < 2 ? 'bg-green-900/20 border border-green-900/50' : 'bg-slate-950/50'}`}>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`font-mono text-xs w-5 ${i < 2 ? 'text-green-400 font-bold' : 'text-slate-500'}`}>{i + 1}.</span>
-                                            <span className={`text-sm ${i < 2 ? 'text-green-200' : 'text-slate-400'}`}>
-                                                {p['Nickname'] || p['Player Name'] || p['Name']}
-                                            </span>
-                                        </div>
-                                        <span className="font-bold text-sm text-slate-300">{p['Points'] || p['Pts'] || 0}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
+        {/* SECTION 2: CONCLUDED TODAY (Last 24h) */}
+        {concludedMatches.length > 0 && (
+          <section>
+             <h2 className="text-xl font-bold text-slate-400 mb-4 flex items-center gap-2">
+                <span>✅</span> Concluded (Last 24h)
+             </h2>
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {concludedMatches.map((match) => (
+                <div key={match.id} className="flex flex-col gap-2 opacity-90 hover:opacity-100 transition">
+                   {/* Pass showScore to see the result immediately */}
+                   <MatchCard match={match} showScore={true} />
+                   
+                   {/* Timestamp Footer */}
+                   <div className="flex justify-between px-2 text-xs text-slate-500 font-mono bg-slate-800/50 p-2 rounded-lg border border-slate-800">
+                      <div>
+                        <span className="text-slate-600 mr-2">Start:</span>
+                        {formatTime(match.start_time || match.created_at)}
+                      </div>
+                      <div>
+                        <span className="text-slate-600 mr-2">Result:</span>
+                        <span className="text-amber-500 font-bold">{match.result || 'Ended'}</span>
+                      </div>
+                   </div>
                 </div>
-
-                {/* 2. KNOCKOUT BRACKET SECTION */}
-                {/* This visualizes the path for qualifiers */}
-                <div className="bg-slate-900 p-8 rounded-2xl border border-slate-700 text-center">
-                    <h2 className="text-2xl font-bold text-white mb-8">🏆 Knockout Stage</h2>
-                    
-                    {/* ADULTS BRACKET (2 Groups -> Semis -> Final) */}
-                    {activeTab === 'Adults' && (
-                        <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16">
-                            
-                            {/* SEMI FINALS */}
-                            <div className="space-y-12">
-                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
-                                    <div className="text-xs text-slate-500 mb-2 uppercase tracking-wider">Semi-Final 1</div>
-                                    <div className="font-bold text-green-400 mb-1">A1: {data.groups[0]?.players[0]?.['Nickname'] || 'TBD'}</div>
-                                    <div className="text-xs text-slate-500">vs</div>
-                                    <div className="font-bold text-blue-400 mt-1">B2: {data.groups[1]?.players[1]?.['Nickname'] || 'TBD'}</div>
-                                    {/* Line to Final */}
-                                    <div className="hidden md:block absolute top-1/2 -right-8 w-8 h-0.5 bg-slate-600"></div>
-                                    <div className="hidden md:block absolute top-1/2 -right-8 w-0.5 h-20 bg-slate-600 origin-top"></div> 
-                                </div>
-
-                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
-                                    <div className="text-xs text-slate-500 mb-2 uppercase tracking-wider">Semi-Final 2</div>
-                                    <div className="font-bold text-blue-400 mb-1">B1: {data.groups[1]?.players[0]?.['Nickname'] || 'TBD'}</div>
-                                    <div className="text-xs text-slate-500">vs</div>
-                                    <div className="font-bold text-green-400 mt-1">A2: {data.groups[0]?.players[1]?.['Nickname'] || 'TBD'}</div>
-                                     {/* Line to Final */}
-                                     <div className="hidden md:block absolute top-1/2 -right-8 w-8 h-0.5 bg-slate-600"></div>
-                                     <div className="hidden md:block absolute bottom-1/2 -right-8 w-0.5 h-20 bg-slate-600 origin-bottom"></div>
-                                </div>
-                            </div>
-
-                            {/* GRAND FINAL */}
-                            <div className="border-2 border-amber-500 rounded-xl p-6 bg-gradient-to-br from-slate-800 to-slate-900 w-56 shadow-2xl relative z-10">
-                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-900 px-3 py-1 rounded-full text-xs font-black uppercase">Grand Final</div>
-                                <div className="text-lg font-bold text-white mb-2">Winner SF1</div>
-                                <div className="text-sm text-slate-500">vs</div>
-                                <div className="text-lg font-bold text-white mt-2">Winner SF2</div>
-                            </div>
-
-                        </div>
-                    )}
-
-                    {/* KIDS BRACKET (Top 4 -> Semis -> Final) */}
-                     {activeTab === 'Kids' && (
-                        <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16">
-                            
-                             <div className="space-y-12">
-                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
-                                    <div className="text-xs text-slate-500 mb-2">SF 1</div>
-                                    <div className="font-bold text-green-400">1st: {data.groups[0]?.players[0]?.['Nickname'] || 'TBD'}</div>
-                                    <div className="text-xs text-slate-500 my-1">vs</div>
-                                    <div className="font-bold text-white">4th: {data.groups[0]?.players[3]?.['Nickname'] || 'TBD'}</div>
-                                </div>
-
-                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
-                                    <div className="text-xs text-slate-500 mb-2">SF 2</div>
-                                    <div className="font-bold text-green-400">2nd: {data.groups[0]?.players[1]?.['Nickname'] || 'TBD'}</div>
-                                    <div className="text-xs text-slate-500 my-1">vs</div>
-                                    <div className="font-bold text-white">3rd: {data.groups[0]?.players[2]?.['Nickname'] || 'TBD'}</div>
-                                </div>
-                            </div>
-
-                            {/* GRAND FINAL */}
-                            <div className="border-2 border-amber-500 rounded-xl p-6 bg-gradient-to-br from-slate-800 to-slate-900 w-56 shadow-2xl">
-                                <div className="text-xs text-amber-500 font-bold mb-2">CHAMPIONSHIP</div>
-                                <div className="text-lg font-bold text-white">Winner SF1</div>
-                                <div className="text-sm text-slate-500 my-1">vs</div>
-                                <div className="text-lg font-bold text-white">Winner SF2</div>
-                            </div>
-                        </div>
-                     )}
-                     
-                     {/* JUNIORS NOTE */}
-                     {activeTab === 'Juniors' && (
-                         <div className="text-center">
-                             <div className="inline-block bg-slate-800 px-6 py-3 rounded-xl border border-slate-600">
-                                 <span className="text-2xl block mb-2">➡️</span>
-                                 <h3 className="font-bold text-white">Super Six Stage</h3>
-                                 <p className="text-sm text-slate-400 mt-1">Top 2 from each of the 3 groups advance to a final round-robin league.</p>
-                             </div>
-                         </div>
-                     )}
-
-                </div>
+              ))}
             </div>
+          </section>
+        )}
+
+        {/* EMPTY STATE */}
+        {matches.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 opacity-50">
+            <h2 className="text-xl">No active or recent matches found.</h2>
+          </div>
         )}
 
       </div>
