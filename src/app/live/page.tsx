@@ -9,7 +9,6 @@ const DATA_SOURCES = [
     standings: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6UFPFARgN12MiEuYpGG2WWAGe0SPlORnm1jeSgoFiXZY7ia4sFXMXAVXalIVn1X8cCK8kFAQ__44k/pub?gid=535970026&single=true&output=csv',
     rounds: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6UFPFARgN12MiEuYpGG2WWAGe0SPlORnm1jeSgoFiXZY7ia4sFXMXAVXalIVn1X8cCK8kFAQ__44k/pub?gid=1586830246&single=true&output=csv'
   },
-  // ... (Juniors and Kids sources remain the same)
   { 
     category: 'Juniors', 
     standings: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSugPx6ejmoqQGvkXMVZ2IC-5NKuKFuhrBkEFjSRr-lZbY1aQIfW0tQXllF6cSGNIHL7TXgklGosGZ6/pub?gid=45823858&single=true&output=csv',
@@ -25,11 +24,7 @@ const DATA_SOURCES = [
 export default function Groups() {
   const [activeTab, setActiveTab] = useState('Adults');
   const [loading, setLoading] = useState(true);
-  
-  // State for parsed data
-  const [standings, setStandings] = useState<any[]>([]);
-  const [rounds, setRounds] = useState<any[]>([]);
-  const [groups, setGroups] = useState<any>({}); // { A: [players], B: [players] }
+  const [data, setData] = useState<any>(null); // Stores processed group data
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,18 +33,14 @@ export default function Groups() {
       if (!source) return;
 
       try {
-        // 1. Fetch Standings (To get Player IDs and Names)
+        // Fetch Standings
         const standingsRes = await fetch(source.standings);
         const standingsText = await standingsRes.text();
         const standingsParsed = Papa.parse(standingsText, { header: true, skipEmptyLines: true });
-        
-        // 2. Fetch Rounds (To get Match Results)
-        const roundsRes = await fetch(source.rounds);
-        const roundsText = await roundsRes.text();
-        const roundsParsed = Papa.parse(roundsText, { header: true, skipEmptyLines: true });
 
-        // Process Data
-        processData(standingsParsed.data, roundsParsed.data);
+        // Process Data based on Category
+        const processed = processCategoryData(activeTab, standingsParsed.data);
+        setData(processed);
         
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -61,69 +52,65 @@ export default function Groups() {
     fetchData();
   }, [activeTab]);
 
-  const processData = (standingsData: any[], roundsData: any[]) => {
-    // 1. Map Players to Groups based on "Tournament ID"
-    // Assuming 'Tournament ID' column exists. If not, check your CSV header name.
-    const playerGroups: any = { A: [], B: [], C: [], P: [] }; // P for Kids (P1-P10)
-    
-    standingsData.forEach((player: any) => {
-      const id = player['Tournament ID'] || player['ID']; // Adjust column name if needed
-      const name = player['Nickname'] || player['Player Name'] || 'Unknown';
-      const points = player['Points'] || player['Pts'] || 0;
+  const processCategoryData = (category: string, standings: any[]) => {
+    // Helper to parse points
+    const getPoints = (p: any) => parseFloat(p['Points'] || p['Pts'] || p['Total'] || '0');
+
+    if (category === 'Adults') {
+      // Filter by ID prefix
+      const groupA = standings.filter((p: any) => p['Tournament ID']?.startsWith('GAP') || p['ID']?.startsWith('GAP'));
+      const groupB = standings.filter((p: any) => p['Tournament ID']?.startsWith('GBP') || p['ID']?.startsWith('GBP'));
       
-      if (id) {
-        // Check for GAP, GBP, GCP prefix
-        if (id.startsWith('GAP')) playerGroups.A.push({ id, name, points });
-        else if (id.startsWith('GBP')) playerGroups.B.push({ id, name, points });
-        else if (id.startsWith('GCP')) playerGroups.C.push({ id, name, points }); // For Juniors
-        else if (id.startsWith('P')) playerGroups.P.push({ id, name, points }); // For Kids
-      }
-    });
-
-    // Sort players by points in each group
-    Object.keys(playerGroups).forEach(key => {
-        playerGroups[key].sort((a: any, b: any) => parseFloat(b.points) - parseFloat(a.points));
-    });
-
-    setGroups(playerGroups);
-    setStandings(standingsData);
-    setRounds(roundsData);
-  };
-
-  // Helper to find match result between two players (by ID or Name)
-  // This is a simplified lookup. You might need to adjust based on your Rounds CSV structure.
-  const getMatchResult = (p1: any, p2: any) => {
-    // Look for a match where White=p1 & Black=p2 OR White=p2 & Black=p1
-    // We need to match based on Name or ID depending on what's in the Rounds sheet.
-    // Assuming Rounds sheet uses Names for 'White' and 'Black' columns.
+      return {
+        groups: [
+          { name: 'Group A', players: groupA.sort((a: any, b: any) => getPoints(b) - getPoints(a)) },
+          { name: 'Group B', players: groupB.sort((a: any, b: any) => getPoints(b) - getPoints(a)) }
+        ]
+      };
+    } 
     
-    const match = rounds.find((r: any) => {
-        const white = r['White'] || r['White Name'];
-        const black = r['Black'] || r['Black Name'];
-        return (white === p1.name && black === p2.name) || (white === p2.name && black === p1.name);
-    });
+    else if (category === 'Juniors') {
+      // Needs logic for 3 groups. Assuming prefixes or grouping logic.
+      // IF prefixes aren't clear, we might need a specific 'Group' column in the CSV? 
+      // For now, I'll attempt a generic split or look for a Group column.
+      // FALLBACK: If no explicit ID logic, maybe split by row count or look for a "Group" header?
+      // Let's try finding unique ID prefixes if possible, or just dump them all if structure is unclear.
+      // IMPROVEMENT: Check if there is a 'Group' column in your CSV.
+      
+      // Attempting to split by ID prefix assuming standard naming
+      const groups: any = {};
+      standings.forEach((p: any) => {
+          const id = p['Tournament ID'] || p['ID'];
+          if(id) {
+              const prefix = id.replace(/[0-9]/g, ''); // Get letters e.g., 'GAP'
+              if(!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(p);
+          }
+      });
+      
+      // Convert to array
+      const groupArray = Object.keys(groups).map(key => ({
+          name: `Group ${key}`, 
+          players: groups[key].sort((a: any, b: any) => getPoints(b) - getPoints(a))
+      }));
 
-    if (match) {
-        // Return score if played
-        // Check for 'White Points' / 'Black Points' or 'Result'
-        const wPts = match['White Points'] || match['White Pts'];
-        const bPts = match['Black Points'] || match['Black Pts'];
-        
-        if (wPts !== undefined && bPts !== undefined) {
-             // If p1 was white
-             if (match['White'] === p1.name) return `${wPts} - ${bPts}`;
-             else return `${bPts} - ${wPts}`; // p1 was black
-        }
+      return { groups: groupArray };
+    } 
+    
+    else if (category === 'Kids') {
+       // Single Group
+       const sorted = standings.sort((a: any, b: any) => getPoints(b) - getPoints(a));
+       return { 
+           groups: [{ name: 'League Table', players: sorted }] 
+       };
     }
-    return "-"; // Not played
   };
-
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         
-        {/* Header */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           <h1 className="text-3xl font-bold text-blue-400">
             ⚔️ Tournament Progress: {activeTab}
@@ -133,7 +120,7 @@ export default function Groups() {
           </a>
         </div>
 
-        {/* 🎛️ CATEGORY TABS */}
+        {/* TABS */}
         <div className="flex justify-center mb-8">
           <div className="bg-slate-800 p-1 rounded-xl inline-flex shadow-lg border border-slate-700">
             {['Adults', 'Juniors', 'Kids'].map((tab) => (
@@ -155,210 +142,125 @@ export default function Groups() {
         {/* LOADING */}
         {loading && (
              <div className="flex flex-col items-center justify-center h-64 text-slate-500 animate-pulse">
-               <span className="text-2xl mb-2">⚔️</span>
-               Analyzing Tournament Data...
+               <span className="text-2xl mb-2">📊</span>
+               Building Bracket...
              </div>
         )}
 
-        {/* 🏆 VISUALIZATION AREA */}
-        {!loading && (
+        {/* CONTENT */}
+        {!loading && data && (
             <div className="space-y-12">
-
-                {/* --- ADULTS VIEW (Group A vs Group B) --- */}
-                {activeTab === 'Adults' && (
-                    <div className="grid md:grid-cols-2 gap-8">
-                        {/* Group A Card */}
-                        <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
-                            <h2 className="text-xl font-bold text-amber-500 mb-4 border-b border-slate-800 pb-2">Group A Standings</h2>
-                            <div className="space-y-2">
-                                {groups.A?.map((p: any, i: number) => (
-                                    <div key={i} className={`flex justify-between p-3 rounded-lg border ${i < 2 ? 'bg-amber-900/20 border-amber-500/50' : 'bg-slate-950 border-slate-800'}`}>
-                                        <div className="flex gap-3">
-                                            <span className={`font-mono font-bold w-6 ${i < 2 ? 'text-amber-400' : 'text-slate-500'}`}>{i+1}.</span>
-                                            <span className="font-bold text-slate-200">{p.name}</span>
-                                            <span className="text-xs text-slate-500 self-center font-mono">({p.id})</span>
-                                        </div>
-                                        <div className="font-bold text-slate-300">{p.points}</div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="mt-4 text-xs text-slate-500 text-center italic">
-                                * Top 2 qualify for Knockouts
-                            </div>
-                        </div>
-
-                        {/* Group B Card */}
-                        <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
-                            <h2 className="text-xl font-bold text-blue-500 mb-4 border-b border-slate-800 pb-2">Group B Standings</h2>
-                             <div className="space-y-2">
-                                {groups.B?.map((p: any, i: number) => (
-                                    <div key={i} className={`flex justify-between p-3 rounded-lg border ${i < 2 ? 'bg-blue-900/20 border-blue-500/50' : 'bg-slate-950 border-slate-800'}`}>
-                                        <div className="flex gap-3">
-                                            <span className={`font-mono font-bold w-6 ${i < 2 ? 'text-blue-400' : 'text-slate-500'}`}>{i+1}.</span>
-                                            <span className="font-bold text-slate-200">{p.name}</span>
-                                            <span className="text-xs text-slate-500 self-center font-mono">({p.id})</span>
-                                        </div>
-                                        <div className="font-bold text-slate-300">{p.points}</div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="mt-4 text-xs text-slate-500 text-center italic">
-                                * Top 2 qualify for Knockouts
-                            </div>
-                        </div>
-
-                         {/* KNOCKOUT BRACKET PREVIEW (Simplified) */}
-                        <div className="md:col-span-2 bg-slate-900 p-8 rounded-2xl border border-slate-700 text-center mt-8">
-                             <h2 className="text-2xl font-bold text-white mb-6">🏆 Knockout Stage</h2>
-                             
-                             <div className="flex justify-center items-center gap-4 md:gap-12 flex-wrap">
-                                 {/* Semi 1 */}
-                                 <div className="flex flex-col gap-2">
-                                     <div className="bg-slate-800 p-4 rounded-lg border border-amber-500/30 w-48">
-                                         <div className="text-xs text-amber-500 font-bold mb-1">A1 (Group A Winner)</div>
-                                         <div className="font-bold text-white">{groups.A?.[0]?.name || 'TBD'}</div>
-                                     </div>
-                                     <div className="text-slate-500 font-bold text-xs">VS</div>
-                                     <div className="bg-slate-800 p-4 rounded-lg border border-blue-500/30 w-48">
-                                         <div className="text-xs text-blue-500 font-bold mb-1">B2 (Group B Runner-up)</div>
-                                         <div className="font-bold text-white">{groups.B?.[1]?.name || 'TBD'}</div>
-                                     </div>
-                                 </div>
-
-                                 {/* Final Connector */}
-                                 <div className="hidden md:flex flex-col items-center">
-                                     <div className="h-px w-12 bg-slate-600"></div>
-                                     <div className="h-24 w-px bg-slate-600"></div>
-                                     <div className="h-px w-12 bg-slate-600"></div>
-                                 </div>
-
-                                 {/* WINNER BOX */}
-                                 <div className="bg-gradient-to-br from-amber-600 to-orange-700 p-6 rounded-xl shadow-2xl border border-amber-400 w-48 h-32 flex flex-col items-center justify-center transform scale-110">
-                                     <div className="text-xs text-amber-200 font-bold uppercase tracking-widest mb-2">Champion</div>
-                                     <div className="text-2xl font-black text-white">?</div>
-                                 </div>
-
-                                 {/* Final Connector */}
-                                 <div className="hidden md:flex flex-col items-center">
-                                     <div className="h-px w-12 bg-slate-600"></div>
-                                     <div className="h-24 w-px bg-slate-600"></div>
-                                     <div className="h-px w-12 bg-slate-600"></div>
-                                 </div>
-
-                                 {/* Semi 2 */}
-                                 <div className="flex flex-col gap-2">
-                                      <div className="bg-slate-800 p-4 rounded-lg border border-blue-500/30 w-48">
-                                         <div className="text-xs text-blue-500 font-bold mb-1">B1 (Group B Winner)</div>
-                                         <div className="font-bold text-white">{groups.B?.[0]?.name || 'TBD'}</div>
-                                     </div>
-                                     <div className="text-slate-500 font-bold text-xs">VS</div>
-                                     <div className="bg-slate-800 p-4 rounded-lg border border-amber-500/30 w-48">
-                                         <div className="text-xs text-amber-500 font-bold mb-1">A2 (Group A Runner-up)</div>
-                                         <div className="font-bold text-white">{groups.A?.[1]?.name || 'TBD'}</div>
-                                     </div>
-                                 </div>
-                             </div>
-                        </div>
-                    </div>
-                )}
                 
-                {/* --- JUNIORS VIEW (3 Groups -> Super 6 -> Finals) --- */}
-                {activeTab === 'Juniors' && (
-                     <div className="space-y-8">
-                        <div className="grid md:grid-cols-3 gap-6">
-                            {/* Group A */}
-                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                <h3 className="font-bold text-blue-400 mb-2">Group A</h3>
-                                <div className="text-sm space-y-1">
-                                    {groups.A?.map((p:any, i:number) => (
-                                        <div key={i} className={`flex justify-between ${i<2 ? 'text-blue-300 font-bold' : 'text-slate-500'}`}>
-                                            <span>{i+1}. {p.name}</span>
-                                            <span>{p.points}</span>
+                {/* 1. GROUPS SECTION */}
+                <div className={`grid gap-8 ${data.groups.length > 2 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                    {data.groups.map((group: any, idx: number) => (
+                        <div key={idx} className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800">
+                            <h2 className="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2 flex justify-between">
+                                <span>{group.name}</span>
+                                <span className="text-xs font-normal text-slate-500 bg-slate-950 px-2 py-1 rounded">Top 2 Qualify</span>
+                            </h2>
+                            <div className="space-y-2">
+                                {group.players.map((p: any, i: number) => (
+                                    <div key={i} className={`flex justify-between items-center p-2 rounded ${i < 2 ? 'bg-green-900/20 border border-green-900/50' : 'bg-slate-950/50'}`}>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`font-mono text-xs w-5 ${i < 2 ? 'text-green-400 font-bold' : 'text-slate-500'}`}>{i + 1}.</span>
+                                            <span className={`text-sm ${i < 2 ? 'text-green-200' : 'text-slate-400'}`}>
+                                                {p['Nickname'] || p['Player Name'] || p['Name']}
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-                            {/* Group B */}
-                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                <h3 className="font-bold text-purple-400 mb-2">Group B</h3>
-                                <div className="text-sm space-y-1">
-                                    {groups.B?.map((p:any, i:number) => (
-                                        <div key={i} className={`flex justify-between ${i<2 ? 'text-purple-300 font-bold' : 'text-slate-500'}`}>
-                                            <span>{i+1}. {p.name}</span>
-                                            <span>{p.points}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            {/* Group C */}
-                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                <h3 className="font-bold text-green-400 mb-2">Group C</h3>
-                                <div className="text-sm space-y-1">
-                                    {groups.C?.map((p:any, i:number) => (
-                                        <div key={i} className={`flex justify-between ${i<2 ? 'text-green-300 font-bold' : 'text-slate-500'}`}>
-                                            <span>{i+1}. {p.name}</span>
-                                            <span>{p.points}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Progression Arrow */}
-                        <div className="flex justify-center">
-                            <span className="text-3xl">⬇️ Top 2 Advance ⬇️</span>
-                        </div>
-
-                        {/* Super Six Placeholder */}
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-600 text-center">
-                            <h2 className="text-xl font-bold text-white mb-2">🌟 Super Six Stage</h2>
-                            <p className="text-slate-400 text-sm">Top 2 from each group will compete here in a round-robin.</p>
-                            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-4">
-                                {/* Placeholders for the 6 qualifiers */}
-                                {[...Array(6)].map((_, i) => (
-                                    <div key={i} className="bg-slate-900 p-3 rounded border border-slate-700 text-xs text-slate-500">
-                                        Qualifier {i+1}
+                                        <span className="font-bold text-sm text-slate-300">{p['Points'] || p['Pts'] || 0}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
-                     </div>
-                )}
+                    ))}
+                </div>
 
-                 {/* --- KIDS VIEW (Simple Table for now, maybe bracket later) --- */}
-                 {activeTab === 'Kids' && (
-                     <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
-                         <h2 className="text-xl font-bold text-green-500 mb-4">League Table</h2>
-                         <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-950 text-slate-500 text-xs uppercase">
-                                    <tr>
-                                        <th className="p-3">Rank</th>
-                                        <th className="p-3">Player</th>
-                                        <th className="p-3">ID</th>
-                                        <th className="p-3">Points</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800">
-                                    {groups.P?.map((p:any, i:number) => (
-                                        <tr key={i} className="hover:bg-slate-800/50">
-                                            <td className="p-3 font-mono text-slate-500">{i+1}</td>
-                                            <td className={`p-3 font-bold ${i<4 ? 'text-green-400' : 'text-slate-300'}`}>
-                                                {p.name} {i<4 && '✨'}
-                                            </td>
-                                            <td className="p-3 text-slate-500 font-mono text-xs">{p.id}</td>
-                                            <td className="p-3 font-bold text-slate-200">{p.points}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                         </div>
-                         <div className="mt-4 text-xs text-slate-500 text-center">
-                            * Top 4 players qualify for Semifinals.
-                         </div>
-                     </div>
-                 )}
+                {/* 2. KNOCKOUT BRACKET SECTION */}
+                {/* This visualizes the path for qualifiers */}
+                <div className="bg-slate-900 p-8 rounded-2xl border border-slate-700 text-center">
+                    <h2 className="text-2xl font-bold text-white mb-8">🏆 Knockout Stage</h2>
+                    
+                    {/* ADULTS BRACKET (2 Groups -> Semis -> Final) */}
+                    {activeTab === 'Adults' && (
+                        <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16">
+                            
+                            {/* SEMI FINALS */}
+                            <div className="space-y-12">
+                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
+                                    <div className="text-xs text-slate-500 mb-2 uppercase tracking-wider">Semi-Final 1</div>
+                                    <div className="font-bold text-green-400 mb-1">A1: {data.groups[0]?.players[0]?.['Nickname'] || 'TBD'}</div>
+                                    <div className="text-xs text-slate-500">vs</div>
+                                    <div className="font-bold text-blue-400 mt-1">B2: {data.groups[1]?.players[1]?.['Nickname'] || 'TBD'}</div>
+                                    {/* Line to Final */}
+                                    <div className="hidden md:block absolute top-1/2 -right-8 w-8 h-0.5 bg-slate-600"></div>
+                                    <div className="hidden md:block absolute top-1/2 -right-8 w-0.5 h-20 bg-slate-600 origin-top"></div> 
+                                </div>
 
+                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
+                                    <div className="text-xs text-slate-500 mb-2 uppercase tracking-wider">Semi-Final 2</div>
+                                    <div className="font-bold text-blue-400 mb-1">B1: {data.groups[1]?.players[0]?.['Nickname'] || 'TBD'}</div>
+                                    <div className="text-xs text-slate-500">vs</div>
+                                    <div className="font-bold text-green-400 mt-1">A2: {data.groups[0]?.players[1]?.['Nickname'] || 'TBD'}</div>
+                                     {/* Line to Final */}
+                                     <div className="hidden md:block absolute top-1/2 -right-8 w-8 h-0.5 bg-slate-600"></div>
+                                     <div className="hidden md:block absolute bottom-1/2 -right-8 w-0.5 h-20 bg-slate-600 origin-bottom"></div>
+                                </div>
+                            </div>
+
+                            {/* GRAND FINAL */}
+                            <div className="border-2 border-amber-500 rounded-xl p-6 bg-gradient-to-br from-slate-800 to-slate-900 w-56 shadow-2xl relative z-10">
+                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-900 px-3 py-1 rounded-full text-xs font-black uppercase">Grand Final</div>
+                                <div className="text-lg font-bold text-white mb-2">Winner SF1</div>
+                                <div className="text-sm text-slate-500">vs</div>
+                                <div className="text-lg font-bold text-white mt-2">Winner SF2</div>
+                            </div>
+
+                        </div>
+                    )}
+
+                    {/* KIDS BRACKET (Top 4 -> Semis -> Final) */}
+                     {activeTab === 'Kids' && (
+                        <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16">
+                            
+                             <div className="space-y-12">
+                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
+                                    <div className="text-xs text-slate-500 mb-2">SF 1</div>
+                                    <div className="font-bold text-green-400">1st: {data.groups[0]?.players[0]?.['Nickname'] || 'TBD'}</div>
+                                    <div className="text-xs text-slate-500 my-1">vs</div>
+                                    <div className="font-bold text-white">4th: {data.groups[0]?.players[3]?.['Nickname'] || 'TBD'}</div>
+                                </div>
+
+                                <div className="border border-slate-600 rounded-lg p-4 bg-slate-800 w-48 relative">
+                                    <div className="text-xs text-slate-500 mb-2">SF 2</div>
+                                    <div className="font-bold text-green-400">2nd: {data.groups[0]?.players[1]?.['Nickname'] || 'TBD'}</div>
+                                    <div className="text-xs text-slate-500 my-1">vs</div>
+                                    <div className="font-bold text-white">3rd: {data.groups[0]?.players[2]?.['Nickname'] || 'TBD'}</div>
+                                </div>
+                            </div>
+
+                            {/* GRAND FINAL */}
+                            <div className="border-2 border-amber-500 rounded-xl p-6 bg-gradient-to-br from-slate-800 to-slate-900 w-56 shadow-2xl">
+                                <div className="text-xs text-amber-500 font-bold mb-2">CHAMPIONSHIP</div>
+                                <div className="text-lg font-bold text-white">Winner SF1</div>
+                                <div className="text-sm text-slate-500 my-1">vs</div>
+                                <div className="text-lg font-bold text-white">Winner SF2</div>
+                            </div>
+                        </div>
+                     )}
+                     
+                     {/* JUNIORS NOTE */}
+                     {activeTab === 'Juniors' && (
+                         <div className="text-center">
+                             <div className="inline-block bg-slate-800 px-6 py-3 rounded-xl border border-slate-600">
+                                 <span className="text-2xl block mb-2">➡️</span>
+                                 <h3 className="font-bold text-white">Super Six Stage</h3>
+                                 <p className="text-sm text-slate-400 mt-1">Top 2 from each of the 3 groups advance to a final round-robin league.</p>
+                             </div>
+                         </div>
+                     )}
+
+                </div>
             </div>
         )}
 
