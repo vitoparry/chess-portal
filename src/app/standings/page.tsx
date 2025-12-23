@@ -79,6 +79,8 @@ export default function Standings() {
     const getId = (p: any) => {
         let val = p['Tournament ID'] || p['ID'] || p['Code'];
         if (val) return val.toString().toUpperCase();
+        
+        // Fuzzy search
         for (const key in p) {
             if (key.toLowerCase().includes('tournament') || key.toLowerCase().includes('id')) {
                  return p[key]?.toString().toUpperCase() || '';
@@ -91,7 +93,7 @@ export default function Standings() {
     const getName = (p: any) => p['Nickname'] || p['Player Name'] || p['Name'] || 'Unknown';
 
     if (category === 'Adults') {
-      // Filter by ID prefix (Robust check)
+      // Filter by ID prefix using the robust ID finder
       const groupA = rows.filter((p: any) => getId(p).includes('GAP'));
       const groupB = rows.filter((p: any) => getId(p).includes('GBP'));
       
@@ -208,53 +210,35 @@ export default function Standings() {
                                  <span className="text-amber-500 text-2xl">👑</span> Championship Path
                              </h3>
                              
-                             <div className="flex justify-between items-center relative z-10 px-4">
+                             <div className="flex items-center justify-center gap-6 text-xs">
                                  {/* Semis Column */}
-                                 <div className="flex flex-col gap-12 w-full max-w-[180px]">
-                                     {/* SF 1 */}
-                                     <div className="relative bg-slate-900 p-4 rounded-xl border border-slate-600 shadow-xl">
-                                         <div className="absolute -top-3 -left-2 bg-slate-700 text-[10px] font-bold px-2 py-0.5 rounded text-slate-300">SF 1</div>
-                                         <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-800">
-                                             <span className="text-xs text-green-400 font-bold">A1</span>
-                                             <span className="text-sm font-bold text-white truncate max-w-[80px]">{data.groups[0]?.players[0]?.['Nickname'] || 'TBD'}</span>
-                                         </div>
-                                         <div className="flex justify-between items-center">
-                                             <span className="text-xs text-blue-400 font-bold">B2</span>
-                                             <span className="text-sm font-bold text-slate-400 truncate max-w-[80px]">{data.groups[1]?.players[1]?.['Nickname'] || 'TBD'}</span>
-                                         </div>
-                                         {/* Connector Line */}
-                                         <div className="hidden md:block absolute top-1/2 -right-8 w-8 h-0.5 bg-slate-600"></div>
-                                         <div className="hidden md:block absolute top-1/2 -right-8 w-0.5 h-[120%] bg-slate-600 origin-top"></div>
+                                 <div className="flex flex-col gap-12 w-40">
+                                     <div className="relative bg-slate-900 p-3 rounded-lg border border-slate-600 shadow-lg">
+                                         <div className="text-slate-500 mb-1 uppercase tracking-wider text-[10px]">Semi-Final 1</div>
+                                         <div className="font-bold text-green-400 border-b border-slate-800 pb-1 mb-1">{data.groups[0]?.players[0]?.['Nickname'] || 'A1 (TBD)'}</div>
+                                         <div className="font-bold text-blue-400">{data.groups[1]?.players[1]?.['Nickname'] || 'B2 (TBD)'}</div>
+                                         {/* Connector */}
+                                         <div className="hidden md:block absolute top-1/2 -right-6 w-6 h-0.5 bg-slate-600"></div>
+                                         <div className="hidden md:block absolute top-1/2 -right-6 w-0.5 h-16 bg-slate-600 origin-top"></div>
                                      </div>
 
-                                     {/* SF 2 */}
-                                     <div className="relative bg-slate-900 p-4 rounded-xl border border-slate-600 shadow-xl">
-                                         <div className="absolute -top-3 -left-2 bg-slate-700 text-[10px] font-bold px-2 py-0.5 rounded text-slate-300">SF 2</div>
-                                         <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-800">
-                                             <span className="text-xs text-blue-400 font-bold">B1</span>
-                                             <span className="text-sm font-bold text-white truncate max-w-[80px]">{data.groups[1]?.players[0]?.['Nickname'] || 'TBD'}</span>
-                                         </div>
-                                         <div className="flex justify-between items-center">
-                                             <span className="text-xs text-green-400 font-bold">A2</span>
-                                             <span className="text-sm font-bold text-slate-400 truncate max-w-[80px]">{data.groups[0]?.players[1]?.['Nickname'] || 'TBD'}</span>
-                                         </div>
-                                         {/* Connector Line */}
-                                         <div className="hidden md:block absolute top-1/2 -right-8 w-8 h-0.5 bg-slate-600"></div>
-                                         <div className="hidden md:block absolute bottom-1/2 -right-8 w-0.5 h-[120%] bg-slate-600 origin-bottom"></div>
+                                     <div className="relative bg-slate-900 p-3 rounded-lg border border-slate-600 shadow-lg">
+                                         <div className="text-slate-500 mb-1 uppercase tracking-wider text-[10px]">Semi-Final 2</div>
+                                         <div className="font-bold text-blue-400 border-b border-slate-800 pb-1 mb-1">{data.groups[1]?.players[0]?.['Nickname'] || 'B1 (TBD)'}</div>
+                                         <div className="font-bold text-green-400">{data.groups[0]?.players[1]?.['Nickname'] || 'A2 (TBD)'}</div>
+                                         {/* Connector */}
+                                         <div className="hidden md:block absolute top-1/2 -right-6 w-6 h-0.5 bg-slate-600"></div>
+                                         <div className="hidden md:block absolute bottom-1/2 -right-6 w-0.5 h-16 bg-slate-600 origin-bottom"></div>
                                      </div>
                                  </div>
 
                                  {/* Final Column */}
-                                 <div className="w-full max-w-[200px] ml-8">
-                                     <div className="bg-gradient-to-br from-amber-600 to-orange-700 p-1 rounded-2xl shadow-2xl transform hover:scale-105 transition-transform">
-                                         <div className="bg-slate-900 rounded-xl p-5 text-center h-full flex flex-col justify-center">
-                                             <div className="text-amber-500 font-black tracking-widest text-xs uppercase mb-3">Grand Final</div>
-                                             <div className="space-y-2">
-                                                 <div className="bg-slate-800/50 py-2 px-3 rounded text-sm text-slate-200 font-bold">Winner SF1</div>
-                                                 <div className="text-[10px] text-slate-500 font-bold">VS</div>
-                                                 <div className="bg-slate-800/50 py-2 px-3 rounded text-sm text-slate-200 font-bold">Winner SF2</div>
-                                             </div>
-                                         </div>
+                                 <div className="w-40">
+                                     <div className="bg-gradient-to-b from-amber-900/40 to-slate-900 p-4 rounded-xl border border-amber-500/50 text-center shadow-2xl">
+                                         <div className="text-amber-500 font-black mb-2 uppercase tracking-widest text-[10px]">Grand Final</div>
+                                         <div className="text-white font-bold py-1">Winner SF1</div>
+                                         <div className="text-slate-500 text-[10px]">vs</div>
+                                         <div className="text-white font-bold py-1">Winner SF2</div>
                                      </div>
                                  </div>
                              </div>
@@ -338,6 +322,7 @@ export default function Standings() {
                     </div>
                 )}
 
+
                 {/* --- 2. DETAILED DATA TABLE (BOTTOM) --- */}
                 <div className="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden">
                     <div className="bg-slate-950 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
@@ -374,4 +359,3 @@ export default function Standings() {
     </main>
   );
 }
-
