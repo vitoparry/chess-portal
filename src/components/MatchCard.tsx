@@ -7,15 +7,17 @@ interface MatchProps {
 }
 
 // 🧱 ISOLATED BOARD COMPONENT
+// This specific component is "Stubborn". It will ONLY re-render if the gameId changes.
 const LichessBoard = React.memo(({ gameId }: { gameId: string }) => {
   return (
     <iframe 
       // 🚀 CRITICAL FIX: autoplay=1 forces the game to play live moves!
+      // clock=1 shows the timer, which is great for live viewing
       src={`https://lichess.org/embed/${gameId}?theme=auto&bg=dark&autoplay=1&clock=1`}
       className="absolute inset-0 w-full h-full z-10"
       frameBorder="0"
       allowFullScreen
-      style={{ pointerEvents: 'auto' }} 
+      style={{ pointerEvents: 'auto' }} // Explicitly allow interaction (clicks)
     ></iframe>
   );
 }, (prev, next) => prev.gameId === next.gameId);
@@ -24,12 +26,8 @@ const LichessBoard = React.memo(({ gameId }: { gameId: string }) => {
 // 🧠 MAIN CARD COMPONENT
 const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   
-  // 🛡️ SAFETY CHECK: If match is undefined/null, don't crash.
-  if (!match) return null;
-
   const getGameId = (url: string) => {
-    if (!url) return null;
-    const idMatch = url.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
+    const idMatch = url?.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
     return idMatch ? idMatch[1] : null;
   };
 
@@ -38,7 +36,7 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   return (
     <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700 flex flex-col h-full hover:border-slate-600 transition-colors">
       
-      {/* HEADER */}
+      {/* HEADER: Updateable Info */}
       <div className="bg-slate-900/50 p-3 flex justify-between items-center border-b border-slate-700">
         
         {/* White Player */}
@@ -72,6 +70,7 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
       {/* BOARD AREA */}
       <div className="relative w-full aspect-square md:aspect-video lg:aspect-[4/3] bg-slate-950 z-0">
         {gameId ? (
+          // Usage of the Isolated Component
           <LichessBoard gameId={gameId} />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10">
@@ -99,9 +98,8 @@ const MatchCardComponent = ({ match, showScore }: MatchProps) => {
   );
 };
 
-// 🛡️ RE-RENDER GUARD
+// 🛡️ RE-RENDER GUARD: Only update if these specific values change
 export default React.memo(MatchCardComponent, (prev, next) => {
-    if (!prev.match || !next.match) return false;
     return (
         prev.match.id === next.match.id &&
         prev.match.lichess_url === next.match.lichess_url &&
